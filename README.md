@@ -151,6 +151,16 @@ La alerta en la ficha del caso se calcula contra **la fecha de ese caso**, no co
 sigue siendo cierta cuando se revisa un caso viejo y funciona igual sobre el histórico
 importado.
 
+### Exportación
+
+La bandeja y la lista de recurrentes se descargan en CSV **con los filtros puestos**: lo que
+se exporta es exactamente lo que se está viendo. La descarga se transmite fila por fila, así
+que exportar los 5.000 casos no carga nada en memoria.
+
+El archivo sale con separador de punto y coma y BOM UTF-8, que es lo que necesita Excel en
+configuración regional española para no meter la fila entera en una celda ni romper las
+tildes.
+
 ### Escalamiento con dueño
 
 Escalar a nivel 3 no es una bandera: se elige el ingeniero de redes, se exige motivo, y solo
@@ -217,6 +227,8 @@ app/
   Support/
     CalendarioHabil.php         horas y días hábiles, festivos de Colombia
     MetricasTecnico.php         cifras mensuales por técnico y comparación con el equipo
+    ExportadorCsv.php           descarga en CSV transmitida fila por fila
+lang/es/                        mensajes de validación y de sesión en español
   Observers/
     MaterialOrdenObserver.php   descuento atómico de inventario
   Exceptions/
@@ -347,7 +359,8 @@ medición y cuáles son relleno.
 | 4 | Módulo móvil del técnico: ruta del día, cierre con foto, firma y GPS | Pendiente |
 | 5 | Importador del histórico seudonimizado (4.999 casos, 4.114 abonados) | Hecha |
 | 6 | Recurrentes e informe mensual de rendimiento por técnico | Hecha |
-| 7 | Alertas por correo al vencer un SLA y exportación a Excel | Pendiente |
+| 7 | Interfaz en español y exportación de datos a CSV | Hecha |
+| 8 | Alertas por correo al vencer un SLA | Pendiente |
 
 ## Pruebas
 
@@ -368,6 +381,8 @@ Pest sobre SQLite en memoria. Cubren lo que más duele si se rompe:
   recurrente y falta de contacto.
 - `tests/Feature/InformeMensualTest.php` — métricas del mes, comparación con el equipo y el
   congelado de cifras al publicar.
+- `tests/Feature/ExportacionTest.php` — el CSV (BOM, separador, normalización, generadores)
+  y que los mensajes salgan en español.
 
 Las migraciones que tocan llaves foráneas se saltan ese paso en SQLite, que no las admite sobre
 tablas existentes; en MySQL sí se crean.
@@ -376,8 +391,8 @@ tablas existentes; en MySQL sí se crean.
 
 - Las pantallas Livewire no tienen pruebas: lo cubierto es el dominio, no la interfaz.
 - La firma del cliente se guarda como base64 en la tabla; debería ir a `storage`.
-- Los mensajes de validación salen en inglés: falta publicar las traducciones
-  (`composer require laravel-lang/common --dev` y `php artisan lang:add es`).
+- No hay módulo móvil para el técnico de campo: hoy ve sus visitas y las cierra desde
+  la misma interfaz de escritorio, sin foto, firma ni GPS.
 - El consecutivo `numero_soporte` puede colisionar si dos casos se crean en el mismo
   instante; con el volumen actual no es un problema, pero la solución correcta es una
   tabla de secuencias.

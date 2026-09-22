@@ -4,6 +4,7 @@ use App\Models\Cliente;
 use App\Models\Diagnostico;
 use App\Models\Soporte;
 use App\Models\TipoFalla;
+use App\Support\ExportadorCsv;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
@@ -73,19 +74,59 @@ new #[Layout('layouts.app')] class extends Component {
         ];
     }
 
-    public function with(): array
+    /** Mismo criterio que la tabla, sin paginar. */
+    private function consulta()
     {
-        $consulta = Cliente::recurrentes((int) $this->meses, $this->minimo)
+        return Cliente::recurrentes((int) $this->meses, $this->minimo)
             ->orderByDesc('reportes')
             ->orderByDesc('ultimo_reporte');
+    }
+
+    /** El motivo no vive en la base: se decide con las cifras de cada fila. */
+    private function motivoDe($cliente): string
+    {
+        return $cliente->sin_contacto >= $cliente->reportes / 2
+            ? Cliente::MOTIVO_SIN_CONTACTO
+            : Cliente::MOTIVO_FALLA;
+    }
+
+    public function exportar()
+    {
+        $filas = $this->consulta()->get()
+            ->map(fn($c) => [
+                $c->codigo_abonado,
+                $c->nombre,
+                $c->cedula,
+                $c->telefono,
+                $c->reportes,
+                $c->sin_contacto,
+                $c->abiertos,
+                $this->motivoDe($c) === Cliente::MOTIVO_SIN_CONTACTO ? 'No se logra contactar' : 'Falla recurrente',
+                $c->primer_reporte,
+                $c->ultimo_reporte,
+            ])
+            ->when($this->motivo, fn($filas) => $filas->where(
+                7,
+                $this->motivo === Cliente::MOTIVO_SIN_CONTACTO ? 'No se logra contactar' : 'Falla recurrente',
+            ));
+
+        return ExportadorCsv::descargar(
+            ExportadorCsv::nombre('abonados-recurrentes'),
+            ['Abonado', 'Cliente', 'Cédula', 'Teléfono', 'Reportes', 'Sin contacto',
+             'Abiertos', 'Motivo probable', 'Primer reporte', 'Último reporte'],
+            $filas,
+        );
+    }
+
+    public function with(): array
+    {
+        $consulta = $this->consulta();
 
         $pagina = $consulta->paginate(25);
 
         // El motivo se decide por fila con las cifras que ya vienen en la consulta.
         $pagina->getCollection()->transform(function ($cliente) {
-            $cliente->motivo = $cliente->sin_contacto >= $cliente->reportes / 2
-                ? Cliente::MOTIVO_SIN_CONTACTO
-                : Cliente::MOTIVO_FALLA;
+            $cliente->motivo = $this->motivoDe($cliente);
 
             return $cliente;
         });
@@ -120,6 +161,10 @@ new #[Layout('layouts.app')] class extends Component {
                 <option value="falla_recurrente">Falla recurrente</option>
                 <option value="sin_contacto">No se logra contactar</option>
             </select>
+            <button wire:click="exportar" class="px-4 py-2 rounded border text-sm" wire:loading.attr="disabled">
+                <span wire:loading.remove wire:target="exportar">Exportar CSV</span>
+                <span wire:loading wire:target="exportar">Generando...</span>
+            </button>
         </div>
     </div>
 

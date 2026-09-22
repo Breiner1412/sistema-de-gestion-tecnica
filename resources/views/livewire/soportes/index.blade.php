@@ -2,6 +2,7 @@
 
 use App\Models\Soporte;
 use App\Models\User;
+use App\Support\ExportadorCsv;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
@@ -41,7 +42,11 @@ new #[Layout('layouts.app')] class extends Component {
         $this->resetPage();
     }
 
-    public function with(): array
+    /**
+     * La consulta filtrada, sin paginar. La comparten el listado y la
+     * exportación para que el CSV traiga exactamente lo que se ve en pantalla.
+     */
+    private function consulta()
     {
         $consulta = Soporte::query()
             ->with([
@@ -50,6 +55,7 @@ new #[Layout('layouts.app')] class extends Component {
                 'usuarioRegistra:id,name',
                 'tecnicoSoporte:id,name',
                 'diagnostico:id,nombre',
+                'tipoFalla:id,nombre',
             ])
             ->buscar($this->buscar)
             ->when($this->estado, fn($q) => $q->where('estado', $this->estado))
@@ -66,9 +72,51 @@ new #[Layout('layouts.app')] class extends Component {
         };
 
         // Los casos abiertos se ordenan por urgencia real, no por fecha.
-        $consulta = $this->vista === ''
+        return $this->vista === ''
             ? $consulta->latest('id')
             : $consulta->orderByRaw('sla_pausado_at is not null')->orderBy('sla_vence_at')->latest('id');
+    }
+
+    /** Descarga los casos filtrados, fila por fila. */
+    public function exportar()
+    {
+        return ExportadorCsv::descargar(
+            ExportadorCsv::nombre('soportes'),
+            ['N° soporte', 'Ingreso', 'Abonado', 'Cliente', 'Tipo', 'Canal', 'Criticidad',
+             'Servicio', 'Falla reportada', 'Diagnóstico', 'Estado', 'Responsable',
+             'Registrado por', 'Escalado a N3', 'Cierre', 'Respuesta (min)', 'Resolución (min)'],
+            $this->filasParaExportar(),
+        );
+    }
+
+    private function filasParaExportar(): \Generator
+    {
+        foreach ($this->consulta()->lazy(500) as $soporte) {
+            yield [
+                $soporte->numero_soporte,
+                $soporte->created_at,
+                $soporte->cliente->codigo_abonado ?? '',
+                $soporte->cliente->nombre ?? '',
+                $soporte->etiquetaTipo(),
+                $soporte->etiquetaCanal(),
+                Soporte::CRITICIDADES[$soporte->criticidad] ?? $soporte->criticidad,
+                Soporte::SERVICIOS[$soporte->servicio_afectado] ?? '',
+                $soporte->tipoFalla->nombre ?? '',
+                $soporte->diagnostico->nombre ?? '',
+                $soporte->etiquetaEstado(),
+                $soporte->tecnicoSoporte->name ?? '',
+                $soporte->usuarioRegistra->name ?? '',
+                (bool) $soporte->escalado_nivel_3,
+                $soporte->fecha_cierre,
+                $soporte->tiempo_respuesta,
+                $soporte->tiempo_resolucion,
+            ];
+        }
+    }
+
+    public function with(): array
+    {
+        $consulta = $this->consulta();
 
         return [
             'soportes' => $consulta->paginate(25),
@@ -91,9 +139,15 @@ new #[Layout('layouts.app')] class extends Component {
 
     <div class="flex justify-between items-center mb-4">
         <h1 class="text-2xl font-bold text-slate-800">Bandeja de soportes</h1>
-        <a href="{{ route('soportes.create') }}" wire:navigate class="bg-blue-600 text-white px-4 py-2 rounded">
-            + Nuevo soporte
-        </a>
+        <div class="flex gap-2">
+            <button wire:click="exportar" class="px-4 py-2 rounded border text-sm" wire:loading.attr="disabled">
+                <span wire:loading.remove wire:target="exportar">Exportar CSV</span>
+                <span wire:loading wire:target="exportar">Generando...</span>
+            </button>
+            <a href="{{ route('soportes.create') }}" wire:navigate class="bg-blue-600 text-white px-4 py-2 rounded">
+                + Nuevo soporte
+            </a>
+        </div>
     </div>
 
     {{-- Vistas rápidas --}}
