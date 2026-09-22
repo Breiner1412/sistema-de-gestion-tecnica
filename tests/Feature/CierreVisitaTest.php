@@ -135,6 +135,10 @@ it('le cree al reloj del terreno y no al de la sincronización', function () {
     $usuario = usuarioCon(User::ROL_TECNICO_CAMPO);
     $visita = visitaDePrueba($usuario);
 
+    // La orden tiene que existir antes de cerrarse: una visita programada hoy
+    // no pudo cerrarse tres horas antes de que la programaran.
+    $visita->forceFill(['created_at' => now()->subHours(6)])->saveQuietly();
+
     $enTerreno = now()->subHours(3);
 
     $this->actingAs($usuario)

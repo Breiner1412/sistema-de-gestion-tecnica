@@ -17,7 +17,13 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // Ojo: definir esto REEMPLAZA el criterio por defecto de Laravel, que es
+        // justamente $request->expectsJson(). Con solo 'api/*', un error de
+        // validación en cualquier otra ruta salía como redirección HTML aunque
+        // quien preguntara fuera fetch() esperando JSON —que es como habla el
+        // celular con /campo—. Se conserva el forzado de api/* y se devuelve el
+        // comportamiento normal para todo lo demás.
         $exceptions->shouldRenderJsonWhen(
-            fn(Request $request) => $request->is('api/*'),
+            fn(Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
     })->create();
