@@ -52,6 +52,26 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Alertas por correo
+    |--------------------------------------------------------------------------
+    | El semáforo de la bandeja solo lo ve quien está mirando la pantalla. Un
+    | caso inmediato tiene cuatro horas hábiles: si nadie abre la bandeja en
+    | esas cuatro horas, el color no sirvió de nada. El comando
+    | `soportes:alertar-sla` avisa al técnico asignado cuando su caso entra en
+    | riesgo, y a los roles de aquí abajo cuando algo ya se venció o cuando
+    | nadie lo ha tomado.
+    |
+    | El umbral de riesgo es el mismo del semáforo, arriba: no tiene sentido
+    | que la pantalla diga una cosa y el correo otra.
+    */
+
+    'alertas' => [
+        'activas' => true,
+        'copia_gestion' => ['admin', 'gerente'],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Sin contacto
     |--------------------------------------------------------------------------
     | Intentos antes de cerrar el caso como "sin contacto definitivo" y

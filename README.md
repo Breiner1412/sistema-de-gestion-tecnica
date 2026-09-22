@@ -136,6 +136,28 @@ cierra los que agotaron los intentos. Sin él la hora de reintento pasaría y na
 llamar, que es justamente el problema que se quería resolver. Esas transiciones quedan marcadas
 en el historial como automáticas, sin usuario.
 
+### Alertas de SLA
+
+El semáforo de la bandeja solo lo ve quien está mirando la pantalla, y un caso inmediato tiene
+cuatro horas hábiles: si nadie abre la bandeja en esas cuatro horas, el color no sirvió de nada.
+`soportes:alertar-sla` corre cada hora en horario hábil y avisa por correo:
+
+- al **técnico asignado**, cuando su caso cruza el 85 % del tiempo —el mismo umbral del
+  semáforo, para que la pantalla y el correo no digan cosas distintas—;
+- a **gestión** (`admin` y `gerente`, configurable), cuando un caso ya se venció o cuando
+  lleva rato en riesgo y **nadie lo ha tomado**, que si no no aparecería en la bandeja de nadie.
+
+Dos decisiones que evitan que el aviso se vuelva ruido y deje de leerse:
+
+- **un solo correo por persona**, con lo vencido primero y lo que está por vencerse después;
+  un correo por caso son quince correos al mismo técnico en un día movido;
+- **dos avisos por caso como máximo** —uno al entrar en riesgo, otro al vencerse—. El nivel ya
+  notificado queda guardado en el caso (`alerta_sla_nivel`), así que correr el comando cada
+  hora no repite nada.
+
+Fuera de horario no se avisa: el reloj está parado, así que un correo de madrugada no diría
+nada que no se pueda decir a las siete. Se apaga con `sla.alertas.activas` en `config/sla.php`.
+
 ### Abonados recurrentes
 
 La operación los llamaba reincidentes y los sacaba aparte, porque son **dos problemas
@@ -275,15 +297,24 @@ npm run dev
 
 ### Tareas programadas
 
-El reintento de los casos sin contacto depende del planificador. En el servidor basta una
-entrada de cron:
+Dos comandos dependen del planificador: el reintento de los casos sin contacto (cada cuarto de
+hora) y las alertas de SLA (cada hora, de lunes a viernes entre las 7 y las 18). En el servidor
+basta una entrada de cron:
 
 ```
 * * * * * cd /ruta/del/proyecto && php artisan schedule:run >> /dev/null 2>&1
 ```
 
-En local, `php artisan schedule:work` deja el planificador corriendo. Para ver qué haría sin
-tocar nada: `php artisan soportes:reintentar-contacto --dry-run`.
+En local, `php artisan schedule:work` deja el planificador corriendo. Ambos comandos aceptan
+`--dry-run` para ver a quién tocarían sin enviar ni cambiar nada:
+
+```bash
+php artisan soportes:reintentar-contacto --dry-run
+php artisan soportes:alertar-sla --dry-run
+```
+
+Las alertas salen por el `MAIL_MAILER` configurado. En local, `log` las deja en
+`storage/logs/laravel.log`, que es suficiente para verlas sin montar un servidor de correo.
 
 En Laragon el sitio queda en `http://sistema-gestion-tecnica.test`; si el vhost no resuelve,
 `php artisan serve` sirve en `http://127.0.0.1:8000`.
@@ -360,7 +391,7 @@ medición y cuáles son relleno.
 | 5 | Importador del histórico seudonimizado (4.999 casos, 4.114 abonados) | Hecha |
 | 6 | Recurrentes e informe mensual de rendimiento por técnico | Hecha |
 | 7 | Interfaz en español y exportación de datos a CSV | Hecha |
-| 8 | Alertas por correo al vencer un SLA | Pendiente |
+| 8 | Alertas por correo al entrar en riesgo o vencerse un SLA | Hecha |
 
 ## Pruebas
 
@@ -383,6 +414,8 @@ Pest sobre SQLite en memoria. Cubren lo que más duele si se rompe:
   congelado de cifras al publicar.
 - `tests/Feature/ExportacionTest.php` — el CSV (BOM, separador, normalización, generadores)
   y que los mensajes salgan en español.
+- `tests/Feature/AlertaSlaTest.php` — a quién se avisa y a quién no: el técnico asignado, la
+  copia a gestión, el caso que nadie tomó, el reloj en pausa, y que no se repita el aviso.
 
 Las migraciones que tocan llaves foráneas se saltan ese paso en SQLite, que no las admite sobre
 tablas existentes; en MySQL sí se crean.

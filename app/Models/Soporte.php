@@ -196,6 +196,7 @@ class Soporte extends Model
             'sla_vence_at' => 'datetime',
             'sla_pausado_at' => 'datetime',
             'proximo_intento_at' => 'datetime',
+            'alerta_sla_at' => 'datetime',
             'escalado_nivel_3' => 'boolean',
             'criticidad_manual' => 'boolean',
         ];

@@ -25,3 +25,12 @@ Schedule::command('soportes:reintentar-contacto')
     ->everyFifteenMinutes()
     ->withoutOverlapping()
     ->runInBackground();
+
+// Avisa de lo que está por vencerse. Solo en horario hábil: el reloj está
+// parado fuera de él, así que un correo de madrugada no diría nada nuevo.
+Schedule::command('soportes:alertar-sla')
+    ->hourly()
+    ->weekdays()
+    ->between('7:00', '18:00')
+    ->withoutOverlapping()
+    ->runInBackground();
