@@ -91,15 +91,19 @@ class OrdenTrabajo extends Model
     /**
      * Se cerró sin señal y llegó después.
      *
+     * Se compara la hora que declaró el teléfono contra la hora en que el
+     * servidor escribió la fila, que es cuando llegó. No contra `hora_fin`:
+     * esa YA es la del terreno, así que compararlas daría siempre cero.
+     *
      * Media hora de margen: el reloj del celular y el del servidor nunca van
-     * exactamente iguales, y una diferencia de segundos no es una sincronización
-     * diferida, es ruido.
+     * exactamente iguales, y unos segundos de diferencia no son una
+     * sincronización diferida, son ruido.
      */
     public function cerradaEnDiferido(): bool
     {
         return $this->cerrada_en_terreno_at
-            && $this->hora_fin
-            && $this->cerrada_en_terreno_at->diffInMinutes($this->hora_fin, absolute: true) > 30;
+            && $this->updated_at
+            && $this->cerrada_en_terreno_at->diffInMinutes($this->updated_at, absolute: true) > 30;
     }
 
     public function urlFirma(): ?string

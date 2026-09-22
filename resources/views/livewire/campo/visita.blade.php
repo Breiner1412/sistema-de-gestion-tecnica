@@ -37,9 +37,9 @@ new #[Layout('layouts.campo')] class extends Component {
     }
 }; ?>
 
-@php($cliente = $orden->soporte?->cliente)
-
 <div class="px-4 py-4">
+    @php($cliente = $orden->soporte?->cliente)
+
 
     <a href="{{ route('campo.ruta') }}" wire:navigate class="text-sm text-sky-700">&larr; Mi ruta</a>
 
@@ -97,7 +97,7 @@ new #[Layout('layouts.campo')] class extends Component {
                  urlCierre: '{{ route('campo.cerrar', $orden) }}',
                  urlRuta: '{{ route('campo.ruta') }}',
                  yaIniciada: {{ $orden->hora_inicio ? 'true' : 'false' }},
-                 catalogo: {{ Js::from($catalogo) }},
+                 catalogo: {{ \Illuminate\Support\Js::from($catalogo) }},
              })">
 
             {{-- Confirmación --}}

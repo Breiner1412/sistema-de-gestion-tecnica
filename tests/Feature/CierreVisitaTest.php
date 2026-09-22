@@ -147,7 +147,21 @@ it('le cree al reloj del terreno y no al de la sincronización', function () {
 
     expect($visita->cerrada_en_terreno_at->diffInMinutes($enTerreno, absolute: true))->toBeLessThan(2)
         ->and($visita->hora_fin->diffInMinutes($enTerreno, absolute: true))->toBeLessThan(2)
-        ->and($visita->cerradaEnDiferido())->toBeFalse();
+        // Cerró hace tres horas y sincronizó ahora: eso es un cierre diferido.
+        ->and($visita->cerradaEnDiferido())->toBeTrue();
+});
+
+it('no marca como diferido el cierre que salió en el momento', function () {
+    $usuario = usuarioCon(User::ROL_TECNICO_CAMPO);
+    $visita = visitaDePrueba($usuario);
+
+    $this->actingAs($usuario)
+        ->postJson(route('campo.cerrar', $visita), cierreCompleto([
+            'cerrada_en_terreno_at' => now()->toIso8601String(),
+        ]))
+        ->assertOk();
+
+    expect($visita->refresh()->cerradaEnDiferido())->toBeFalse();
 });
 
 it('descarta una hora de terreno imposible', function () {
