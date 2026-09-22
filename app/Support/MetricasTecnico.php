@@ -103,8 +103,10 @@ class MetricasTecnico
             'enviados_campo' => (clone $this->base())->whereHas('ordenesTrabajo')->count(),
             'inmediatos' => (clone $this->base())->where('criticidad', Soporte::CRITICIDAD_INMEDIATA)->count(),
 
-            'tasa_resolucion' => $total > 0 ? round($resueltos / $total * 100) : null,
-            'tasa_sin_contacto' => $total > 0 ? round($sinContacto / $total * 100) : null,
+            // Enteros a propósito: son porcentajes, y además se guardan tal cual
+            // en el snapshot JSON del informe publicado.
+            'tasa_resolucion' => $total > 0 ? (int) round($resueltos / $total * 100) : null,
+            'tasa_sin_contacto' => $total > 0 ? (int) round($sinContacto / $total * 100) : null,
             'promedio_resolucion' => $promedio ? (int) round($promedio) : null,
 
             'dias_trabajados' => count($porDia),
