@@ -40,6 +40,12 @@ new class extends Component {
                     <x-nav-link :href="route('ordenes.index')" :active="request()->routeIs('ordenes.*')" wire:navigate>
                         {{ auth()->user()->tieneRol('tecnico_campo') ? __('Mis visitas') : __('Visitas') }}
                     </x-nav-link>
+                    {{-- La pantalla de campo es la que el técnico usa en el celular. --}}
+                    @if (auth()->user()->tieneRol('admin', 'gerente', 'tecnico_campo'))
+                        <x-nav-link :href="route('campo.ruta')" :active="request()->routeIs('campo.*')" wire:navigate>
+                            {{ __('Mi ruta') }}
+                        </x-nav-link>
+                    @endif
                     @if (auth()->user()->tieneRol(...\App\Models\User::ROLES_GESTION))
                         <x-nav-link :href="route('clientes.index')" :active="request()->routeIs('clientes.*')" wire:navigate>
                             {{ __('Clientes') }}
@@ -128,6 +134,11 @@ new class extends Component {
             <x-responsive-nav-link :href="route('ordenes.index')" :active="request()->routeIs('ordenes.*')" wire:navigate>
                 {{ auth()->user()->tieneRol('tecnico_campo') ? __('Mis visitas') : __('Visitas') }}
             </x-responsive-nav-link>
+            @if (auth()->user()->tieneRol('admin', 'gerente', 'tecnico_campo'))
+                <x-responsive-nav-link :href="route('campo.ruta')" :active="request()->routeIs('campo.*')" wire:navigate>
+                    {{ __('Mi ruta') }}
+                </x-responsive-nav-link>
+            @endif
             @if (auth()->user()->tieneRol(...\App\Models\User::ROLES_GESTION))
                 <x-responsive-nav-link :href="route('clientes.index')" :active="request()->routeIs('clientes.*')" wire:navigate>
                     {{ __('Clientes') }}

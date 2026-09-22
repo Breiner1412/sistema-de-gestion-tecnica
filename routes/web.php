@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\CierreVisitaController;
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
 
@@ -36,6 +37,20 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware('role:admin,gerente,call_center,tecnico_soporte,ingeniero_redes,tecnico_campo')->group(function () {
         Volt::route('/ordenes', 'ordenes.index')->name('ordenes.index');
         Volt::route('/ordenes/{orden}', 'ordenes.show')->name('ordenes.show');
+    });
+
+    // Pantalla de campo. Va aparte de /ordenes porque el técnico la usa con una
+    // mano, de pie y con guantes: otra maquetación, otro layout y un cierre que
+    // puede quedarse guardado en el teléfono hasta que vuelva la señal.
+    Route::middleware('role:admin,gerente,tecnico_campo')->group(function () {
+        Volt::route('/campo', 'campo.ruta')->name('campo.ruta');
+        Volt::route('/campo/visitas/{orden}', 'campo.visita')->name('campo.visita');
+
+        // Estas dos las llama el JavaScript de la cola, no un formulario.
+        Route::post('/campo/visitas/{orden}/inicio', [CierreVisitaController::class, 'iniciar'])
+            ->name('campo.iniciar');
+        Route::post('/campo/visitas/{orden}/cierre', [CierreVisitaController::class, 'cerrar'])
+            ->name('campo.cerrar');
     });
 
     // Bodega.

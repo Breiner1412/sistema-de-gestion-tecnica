@@ -1,12 +1,12 @@
 <?php
 
-use App\Exceptions\TransicionInvalidaException;
 use App\Models\Diagnostico;
 use App\Models\Inventario;
 use App\Models\MaterialOrden;
 use App\Models\OrdenTrabajo;
-use App\Models\Soporte;
 use App\Models\User;
+use App\Services\CierreDeVisita;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
@@ -39,6 +39,7 @@ new #[Layout('layouts.app')] class extends Component {
             'soporte.diagnostico',
             'tecnico.user',
             'materialesUsados.material',
+            'evidencias',
         ]);
     }
 
@@ -128,41 +129,32 @@ new #[Layout('layouts.app')] class extends Component {
             'motivo_no_realizada.required' => 'Explica por qué no se pudo hacer la visita.',
         ]);
 
-        $cambios = [
-            'estado' => $this->estado,
-            'observaciones' => $this->observaciones,
-        ];
+        // Cerrar una visita mueve el caso, el reloj y el inventario. Eso vive en
+        // un solo sitio: el mismo servicio que usa el cierre desde el celular.
+        if (in_array($this->estado, OrdenTrabajo::ESTADOS_FINALES, true)) {
+            $resultado = CierreDeVisita::para($this->orden)->registrar([
+                'uuid' => (string) Str::uuid(),
+                'estado' => $this->estado,
+                'diagnostico_id' => $this->diagnostico_id ?: null,
+                'observaciones' => $this->observaciones,
+                'motivo' => $this->motivo_no_realizada ?: null,
+                'usuario_id' => auth()->id(),
+            ]);
 
-        if ($this->estado === OrdenTrabajo::ESTADO_EN_PROGRESO && !$this->orden->hora_inicio) {
-            $cambios['hora_inicio'] = now();
-        }
+            foreach ($resultado['avisos'] as $aviso) {
+                session()->flash('error', $aviso);
+            }
+        } else {
+            $cambios = [
+                'estado' => $this->estado,
+                'observaciones' => $this->observaciones,
+            ];
 
-        if (in_array($this->estado, [OrdenTrabajo::ESTADO_COMPLETADO, OrdenTrabajo::ESTADO_NO_REALIZADA], true)
-            && !$this->orden->hora_fin) {
-            $cambios['hora_fin'] = now();
-        }
-
-        $this->orden->update($cambios);
-        $this->orden->refresh();
-
-        $soporte = $this->orden->soporte;
-
-        try {
-            // La visita se hizo: el caso se cierra por el único camino válido,
-            // que además reanuda métricas y deja historial.
-            if ($this->estado === OrdenTrabajo::ESTADO_COMPLETADO && !$soporte->estaCerrado()) {
-                $soporte->cerrar((int) $this->diagnostico_id, $this->observaciones);
+            if ($this->estado === OrdenTrabajo::ESTADO_EN_PROGRESO && !$this->orden->hora_inicio) {
+                $cambios['hora_inicio'] = now();
             }
 
-            // No se pudo hacer: el caso vuelve al nivel 2 y el reloj se reanuda.
-            if ($this->estado === OrdenTrabajo::ESTADO_NO_REALIZADA && !$soporte->estaCerrado()) {
-                $soporte->cambiarEstado(
-                    Soporte::ESTADO_EN_PROCESO,
-                    "Visita no realizada: {$this->motivo_no_realizada}"
-                );
-            }
-        } catch (TransicionInvalidaException $e) {
-            session()->flash('error', $e->getMessage());
+            $this->orden->update($cambios);
         }
 
         $this->recargar();
@@ -324,5 +316,54 @@ new #[Layout('layouts.app')] class extends Component {
 
             <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded">Guardar cambios</button>
         </form>
+    @endif
+    {{-- Lo que el técnico dejó desde el celular. Vive aquí porque la oficina es
+         quien lo mira: si la evidencia no se ve desde escritorio, tomarla no sirve. --}}
+    @if ($orden->evidencias->isNotEmpty() || $orden->firma_path || $orden->latitud_fin)
+        <div class="mt-6 border-t pt-4">
+            <h2 class="font-semibold text-slate-800 mb-3">Evidencia de la visita</h2>
+
+            @if ($orden->cerradaEnDiferido())
+                <p class="mb-3 rounded bg-amber-50 p-2 text-xs text-amber-800">
+                    Se cerró en terreno el
+                    {{ $orden->cerrada_en_terreno_at->format('d/m/Y \a \l\a\s H:i') }}
+                    y se sincronizó cuando volvió la señal.
+                </p>
+            @endif
+
+            @if ($orden->evidencias->isNotEmpty())
+                <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    @foreach ($orden->evidencias as $evidencia)
+                        <a href="{{ $evidencia->url() }}" target="_blank" rel="noopener" class="block">
+                            <img src="{{ $evidencia->url() }}" alt="Foto de la visita"
+                                 class="aspect-square w-full rounded border object-cover">
+                            @if ($evidencia->descripcion)
+                                <p class="mt-1 truncate text-xs text-slate-500">{{ $evidencia->descripcion }}</p>
+                            @endif
+                        </a>
+                    @endforeach
+                </div>
+            @endif
+
+            <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                @if ($orden->firma_path)
+                    <div>
+                        <p class="mb-1 text-sm font-medium text-slate-700">Firma del cliente</p>
+                        <img src="{{ $orden->urlFirma() }}" alt="Firma del cliente"
+                             class="h-24 rounded border bg-white p-2">
+                    </div>
+                @endif
+
+                @if ($orden->latitud_fin && $orden->longitud_fin)
+                    <div>
+                        <p class="mb-1 text-sm font-medium text-slate-700">Dónde se cerró</p>
+                        <a class="text-sm text-blue-600" target="_blank" rel="noopener"
+                           href="https://maps.google.com/?q={{ $orden->latitud_fin }},{{ $orden->longitud_fin }}">
+                            {{ $orden->latitud_fin }}, {{ $orden->longitud_fin }}
+                        </a>
+                    </div>
+                @endif
+            </div>
+        </div>
     @endif
 </div>

@@ -136,6 +136,51 @@ cierra los que agotaron los intentos. Sin él la hora de reintento pasaría y na
 llamar, que es justamente el problema que se quería resolver. Esas transiciones quedan marcadas
 en el historial como automáticas, sin usuario.
 
+### El técnico en terreno
+
+La visita es el único punto del flujo donde el sistema no está: el técnico está
+en un sótano, en una zona rural o en un edificio con paredes gruesas, y el cliente
+está delante esperando para firmar. Si cerrar la visita exige señal, el técnico lo
+apunta en un papel y lo pasa por la noche —o no lo pasa—, que es el mismo agujero
+que este proyecto existe para tapar.
+
+Por eso `/campo` es una pantalla aparte de `/ordenes`, con su propio layout: se usa
+de pie, con una mano y a veces con guantes. La ruta del día, un toque para llamar,
+otro para abrir el mapa, y el cierre con diagnóstico, trabajo realizado, material
+consumido, hasta seis fotos y la firma del cliente en el lienzo.
+
+**El cierre nunca depende de la red.** Se guarda en el teléfono (IndexedDB) y se
+envía solo cuando vuelve la señal. Tres decisiones sostienen eso:
+
+- **El identificador del cierre lo pone el teléfono**, antes de enviar. Un reenvío
+  después de una sincronización a medias trae el mismo `uuid`, el servidor lo
+  reconoce y responde que sí sin cerrar el caso dos veces ni descontar el material
+  dos veces. Sin esto, la cola sería peor que el papel.
+- **La hora que manda es la del terreno**, no la de la sincronización: si cerró a
+  las 10:05 sin señal y sincronizó a las 14:30, la visita terminó a las 10:05. Se
+  descarta si es imposible —un reloj de celular mal puesto no fecha una visita el
+  mes que viene—.
+- **Un fallo que se arregla reintentando no es lo mismo que uno que no.** Un 5xx o
+  una red caída se reintentan; un 422 se descarta y se avisa, porque reintentar a
+  ciegas algo que el servidor rechazó por datos inválidos deja la cola atascada
+  para siempre. Un 419 se trata aparte: los datos están bien, lo que caducó es la
+  sesión.
+
+Cerrar una visita mueve el estado de la orden, cierra o reabre el caso por la
+máquina de estados y descuenta inventario. Eso vive en un solo sitio —el servicio
+`CierreDeVisita`— que usan por igual la pantalla de escritorio y el celular; dos
+copias de esa lógica habrían divergido en semanas.
+
+Un detalle que solo aparece con la cola: un cierre que llega tres horas tarde puede
+encontrarse sin stock del material que el técnico ya usó. La visita **no se rechaza**
+—ya está hecha—; se cierra igual y el faltante queda avisado, que es lo único
+honesto que se puede hacer con algo que ya ocurrió.
+
+La pantalla es instalable: el manifiesto y el service worker la dejan abrir en el
+celular como una app, sin barra del navegador, y con la última versión de la ruta
+guardada para cuando no haya señal. El service worker **solo** sirve para que la
+pantalla abra; el envío no pasa por él.
+
 ### Alertas de SLA
 
 El semáforo de la bandeja solo lo ve quien está mirando la pantalla, y un caso inmediato tiene
@@ -292,8 +337,14 @@ CREATE DATABASE gestion_tecnica CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
 
 ```bash
 php artisan migrate --seed
+php artisan storage:link   # fotos y firmas de las visitas
 npm run dev
 ```
+
+La pantalla de campo (`/campo`) usa la cámara y el GPS, y los navegadores solo los
+dan sobre HTTPS o en `localhost`. Para probarla desde el celular en la misma red hace
+falta un túnel (`php artisan serve` + ngrok, o el HTTPS de Laragon); por `http://` a
+una IP local el navegador bloquea las dos cosas.
 
 ### Tareas programadas
 
@@ -387,7 +438,7 @@ medición y cuáles son relleno.
 | 1 | Maestros: clientes y contratos, usuarios y técnicos, inventario con kardex | Hecha |
 | 2 | Bandeja del nivel 2 con semáforo y vistas rápidas | Hecha |
 | 3 | Reintentos automáticos de "sin contacto" por comando programado, con pruebas | Hecha |
-| 4 | Módulo móvil del técnico: ruta del día, cierre con foto, firma y GPS | Pendiente |
+| 4 | Pantalla de campo: ruta del día, cierre con foto, firma y GPS, y cola offline | Hecha |
 | 5 | Importador del histórico seudonimizado (4.999 casos, 4.114 abonados) | Hecha |
 | 6 | Recurrentes e informe mensual de rendimiento por técnico | Hecha |
 | 7 | Interfaz en español y exportación de datos a CSV | Hecha |
@@ -416,6 +467,9 @@ Pest sobre SQLite en memoria. Cubren lo que más duele si se rompe:
   y que los mensajes salgan en español.
 - `tests/Feature/AlertaSlaTest.php` — a quién se avisa y a quién no: el técnico asignado, la
   copia a gestión, el caso que nadie tomó, el reloj en pausa, y que no se repita el aviso.
+- `tests/Feature/CierreVisitaTest.php` — el cierre desde el celular: idempotencia del reenvío,
+  la hora del terreno (y la imposible), fotos y firma en disco, permisos, material que ya no
+  alcanza y la visita que ya cerró otro.
 
 Las migraciones que tocan llaves foráneas se saltan ese paso en SQLite, que no las admite sobre
 tablas existentes; en MySQL sí se crean.
@@ -423,9 +477,11 @@ tablas existentes; en MySQL sí se crean.
 ### Deuda conocida
 
 - Las pantallas Livewire no tienen pruebas: lo cubierto es el dominio, no la interfaz.
-- La firma del cliente se guarda como base64 en la tabla; debería ir a `storage`.
-- No hay módulo móvil para el técnico de campo: hoy ve sus visitas y las cierra desde
-  la misma interfaz de escritorio, sin foto, firma ni GPS.
+- La cola offline no tiene pruebas automáticas: el cierre está cubierto del lado del
+  servidor, pero el JavaScript que guarda y reintenta se probó a mano con el modo sin
+  conexión del navegador.
+- El service worker cachea el HTML de `/campo`, así que el token CSRF de una página muy
+  vieja puede caducar. Se detecta (419) y se avisa, pero obliga a volver a entrar.
 - El consecutivo `numero_soporte` puede colisionar si dos casos se crean en el mismo
   instante; con el volumen actual no es un problema, pero la solución correcta es una
   tabla de secuencias.
