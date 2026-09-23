@@ -3,6 +3,9 @@
 Sistema de control operativo para la mesa de soporte de un proveedor de internet y TV
 por fibra. Laravel 13 · Livewire 3 (Volt) · MySQL · Tailwind.
 
+Este archivo explica **por qué está hecho así**. Si lo que busca es cómo se usa, el
+[manual de usuario](docs/manual-de-usuario.md) lo cuenta por rol y sin términos técnicos.
+
 ---
 
 ## Por qué existe
@@ -552,3 +555,26 @@ tablas existentes; en MySQL sí se crean.
 - El consecutivo `numero_soporte` puede colisionar si dos casos se crean en el mismo
   instante; con el volumen actual no es un problema, pero la solución correcta es una
   tabla de secuencias.
+
+## Licencia
+
+[GNU AGPL-3.0](LICENSE). En corto y sin tecnicismos:
+
+- Puede leerlo, estudiarlo, ejecutarlo y modificarlo.
+- Si lo modifica y lo distribuye, o si **lo usa para dar un servicio por red**, tiene que
+  publicar su versión bajo la misma licencia. Esa segunda parte es lo que distingue a la AGPL
+  de licencias más permisivas, y es a propósito: este sistema está pensado para correr como
+  servicio, que es justo el caso que otras licencias dejan abierto.
+
+El titular de los derechos es Breiner Stiven Guisao Rodríguez. Para usarlo en un producto
+cerrado hay **licencia comercial** disponible: escriba a rodriguezbreiner125@gmail.com.
+
+Esto es un resumen para orientarse, no asesoría legal; lo que vale es el texto de la licencia.
+
+## Sobre los datos
+
+El histórico viene de una operación real, con permiso expreso para usarlo. **Ningún dato
+personal de terceros está en este repositorio**: nombres, cédulas, teléfonos y códigos de
+abonado son sintéticos, el texto libre se descartó entero y los nombres del personal también
+se reemplazaron. Lo que se conservó son las proporciones, que es lo que hace útil el análisis
+sin exponer a nadie. El detalle completo está más arriba, en *El histórico importable*.
