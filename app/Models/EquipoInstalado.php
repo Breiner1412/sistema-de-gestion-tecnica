@@ -9,6 +9,10 @@ class EquipoInstalado extends Model
 {
     use SoftDeletes;
 
+    // Eloquent pluraliza solo la ultima palabra: de EquipoInstalado deduce
+    // 'equipo_instalados', y la tabla es 'equipos_instalados'.
+    protected $table = 'equipos_instalados';
+
     protected $fillable = [
         'contrato_id',
         'tipo',
