@@ -35,7 +35,10 @@ class PerfilDeConsultas
 
     public static function escuchar(): void
     {
-        if (! config('depuracion.perfil_consultas')) {
+        // Durante las pruebas no: cada `php artisan test` dejaba cientos de
+        // lineas en el registro, y ahi no hay nada que medir —la base es
+        // SQLite en memoria y no se parece en nada a la de verdad—.
+        if (! config('depuracion.perfil_consultas') || app()->runningUnitTests()) {
             return;
         }
 
