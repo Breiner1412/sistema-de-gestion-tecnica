@@ -36,6 +36,7 @@ class ImportarHistorico extends Command
                             {--casos=database/data/historico_casos.csv : CSV de casos}
                             {--clientes=database/data/historico_clientes.csv : CSV de clientes}
                             {--fresh : Borra los casos existentes antes de importar}
+                            {--actualizar : Refresca nombre y telefono de los clientes que ya existen}
                             {--limit=0 : Importa solo los primeros N casos}';
 
     protected $description = 'Importa el histórico seudonimizado de la operación desde CSV';
@@ -97,9 +98,21 @@ class ImportarHistorico extends Command
         $existentes = Cliente::whereNotNull('codigo_abonado')->pluck('id', 'codigo_abonado')->all();
         $lote = [];
         $nuevos = 0;
+        $refrescar = [];
 
         foreach ($this->filas($ruta) as $fila) {
             if (isset($existentes[$fila['codigo_abonado']])) {
+                // Por defecto no se toca lo que ya esta: el importador se corre
+                // muchas veces y no debe pisar lo que alguien edito a mano. Con
+                // --actualizar si, que es como se llevan a la base los nombres
+                // reasignados por datos:seudonimizar-nombres.
+                if ($this->option('actualizar')) {
+                    $refrescar[$existentes[$fila['codigo_abonado']]] = [
+                        'nombre' => $fila['nombre'],
+                        'telefono' => $fila['telefono'],
+                    ];
+                }
+
                 continue;
             }
 
@@ -127,7 +140,31 @@ class ImportarHistorico extends Command
 
         $this->line("  {$nuevos} clientes nuevos.");
 
+        if ($refrescar !== []) {
+            $this->refrescar($refrescar);
+        }
+
         return Cliente::whereNotNull('codigo_abonado')->pluck('id', 'codigo_abonado')->all();
+    }
+
+    /**
+     * Refresca los clientes que ya estaban.
+     *
+     * Son actualizaciones fila a fila dentro de una transaccion, y no un UPDATE
+     * con CASE: cada cliente lleva valores distintos, son unos miles y esto se
+     * corre a mano de vez en cuando. La version lista de leer gana.
+     *
+     * @param  array<int, array{nombre: string, telefono: string}>  $cambios
+     */
+    private function refrescar(array $cambios): void
+    {
+        DB::transaction(function () use ($cambios) {
+            foreach ($cambios as $id => $valores) {
+                DB::table('clientes')->where('id', $id)->update($valores + ['updated_at' => now()]);
+            }
+        });
+
+        $this->line('  '.count($cambios).' clientes actualizados.');
     }
 
     /* ---------------------------------------------------------------

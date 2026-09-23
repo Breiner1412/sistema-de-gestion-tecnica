@@ -370,6 +370,29 @@ Las alertas salen por el `MAIL_MAILER` configurado. En local, `log` las deja en
 En Laragon el sitio queda en `http://sistema-gestion-tecnica.test`; si el vhost no resuelve,
 `php artisan serve` sirve en `http://127.0.0.1:8000`.
 
+### Medir una pantalla lenta
+
+`PERFIL_CONSULTAS=true` en el `.env` deja una línea por petición en el registro:
+
+```
+perfil {"ruta":"GET /clientes/9","consultas":6,"ms_base":38.8,"ms_total":7067.7}
+```
+
+Tres cifras que separan los casos que se confunden entre sí:
+
+- muchas consultas y poco tiempo en cada una → un N+1;
+- pocas consultas y una lenta → falta un índice o sobra un JOIN;
+- **poco tiempo en la base y mucho en total → no es la base.**
+
+La línea de arriba es real y es el tercer caso: seis consultas, 39 ms contra la base, siete
+segundos en total. La ficha del abonado no estaba lenta, estaba **rota** —`EquipoInstalado`
+apuntaba a una tabla que no existía, porque Eloquent pluraliza solo la última palabra del
+nombre de la clase— y los siete segundos eran Laravel dibujando su página de error. Sin medir,
+lo natural habría sido buscar un N+1 que no estaba.
+
+Se apaga cuando se termina de medir: escuchar todas las consultas cuesta, y en las pruebas ni
+se engancha.
+
 ### Cuentas de prueba
 
 Todas con contraseña `cambiar123`.
@@ -409,6 +432,47 @@ desempeño de personas reales, y este es un proyecto público.
 ```bash
 php artisan soportes:importar-historico
 ```
+
+El importador **no pisa** los clientes que ya existen, para no deshacer ediciones hechas a
+mano. Con `--actualizar` sí refresca nombre y teléfono, que es como se llevan a la base los
+nombres reasignados. Y con `--fresh` borra los casos antes de importar: sin eso, correrlo dos
+veces mete el histórico dos veces y **duplica todas las cifras** —los recurrentes, el informe
+mensual, el panel—.
+
+#### Los nombres falsos
+
+`datos:seudonimizar-nombres` genera los nombres de los abonados. Está en el repositorio a
+propósito: es la parte del proceso de anonimización que puede publicarse, porque no necesita el
+Excel original. Es determinista —el nombre sale del código de abonado—, así que el CSV no
+cambia entre commits sin motivo.
+
+```bash
+php artisan datos:seudonimizar-nombres --dry-run   # ver una muestra
+php artisan datos:seudonimizar-nombres
+php artisan soportes:importar-historico --actualizar
+```
+
+Existe por un error que vale la pena dejar escrito. El primer generador combinaba una lista
+corta de nombres con una lista corta de apellidos: **144 combinaciones para 4.114 personas**,
+cada nombre repetido veintinueve veces. Y como la lista de clientes se ordena por nombre, las
+copias caían juntas y la primera pantalla parecía un solo cliente clonado. La prueba que lo
+acompaña no comprueba que el generador produzca un nombre: comprueba que produzca 4.200
+distintos, que es lo que no se verificó la primera vez.
+
+#### Los contratos
+
+El Excel era una hoja de incidencias: traía el caso y la falla, pero nada del contrato ni del
+equipo instalado, porque eso vivía en el ERP del ISP. Los abonados importados quedan entonces
+sin contrato, y la ficha del cliente muestra una sección vacía que parece un fallo del sistema
+y es un hueco del origen.
+
+```bash
+php artisan db:seed --class=ContratoHistoricoSeeder
+```
+
+Eso lo rellena con **datos inventados** —fechas, planes y seriales plausibles, nada más—. Va en
+un seeder aparte y no dentro del importador justamente para que la línea quede clara: el
+importador trae lo que hubo, el seeder rellena lo que nunca hubo.
 
 Qué se conservó del original: la fecha y hora de cada caso, su tipo, el servicio afectado, la
 falla reportada, el diagnóstico, el estado final, la fecha de cierre y la concentración real de
@@ -470,6 +534,9 @@ Pest sobre SQLite en memoria. Cubren lo que más duele si se rompe:
 - `tests/Feature/CierreVisitaTest.php` — el cierre desde el celular: idempotencia del reenvío,
   la hora del terreno (y la imposible), fotos y firma en disco, permisos, material que ya no
   alcanza y la visita que ya cerró otro.
+- `tests/Feature/SeudonimizarNombresTest.php` — que el generador de nombres no repita ninguno
+  en una base de 4.200, que sea determinista y que no toque cédula, teléfono ni código.
+- `tests/Feature/ModelosTest.php` — que cada modelo apunte a una tabla que exista.
 
 Las migraciones que tocan llaves foráneas se saltan ese paso en SQLite, que no las admite sobre
 tablas existentes; en MySQL sí se crean.
