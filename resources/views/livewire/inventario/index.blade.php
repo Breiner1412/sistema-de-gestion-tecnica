@@ -125,22 +125,34 @@ new #[Layout('layouts.app')] class extends Component {
         $material = Inventario::findOrFail($this->movimiento_material_id);
         $cantidad = (int) $this->movimiento_cantidad;
 
-        if ($this->movimiento_tipo === 'salida' && $material->cantidad_total < $cantidad) {
-            $this->addError('movimiento_cantidad', "Solo hay {$material->cantidad_total} unidades disponibles.");
-            return;
-        }
+        $aplicado = DB::transaction(function () use ($material, $cantidad) {
+            // La salida lleva la condición en el UPDATE, como el consumo de
+            // las visitas: dos salidas simultáneas no dejan el stock negativo.
+            $filas = $this->movimiento_tipo === 'entrada'
+                ? Inventario::whereKey($material->id)->increment('cantidad_total', $cantidad)
+                : Inventario::whereKey($material->id)
+                    ->where('cantidad_total', '>=', $cantidad)
+                    ->decrement('cantidad_total', $cantidad);
 
-        DB::transaction(function () use ($material, $cantidad) {
-            $this->movimiento_tipo === 'entrada'
-                ? $material->increment('cantidad_total', $cantidad)
-                : $material->decrement('cantidad_total', $cantidad);
+            if ($filas === 0) {
+                return false;
+            }
 
             MovimientoInventario::create([
                 'material_id' => $material->id,
                 'tipo' => $this->movimiento_tipo,
                 'cantidad' => $cantidad,
             ]);
+
+            return true;
         });
+
+        if (! $aplicado) {
+            $disponible = Inventario::whereKey($material->id)->value('cantidad_total');
+            $this->addError('movimiento_cantidad', "Solo hay {$disponible} unidades disponibles.");
+
+            return;
+        }
 
         $this->panel = '';
         unset($this->bajos);

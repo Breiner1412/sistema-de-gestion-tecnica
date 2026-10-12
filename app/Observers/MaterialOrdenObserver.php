@@ -67,6 +67,11 @@ class MaterialOrdenObserver
      */
     public function deleted(MaterialOrden $materialOrden): void
     {
+        // Otra petición ya lo había borrado y devuelto: no hay nada que devolver.
+        if (! $materialOrden->borradoEfectivo) {
+            return;
+        }
+
         Inventario::whereKey($materialOrden->material_id)
             ->increment('cantidad_total', $materialOrden->cantidad_usada);
 

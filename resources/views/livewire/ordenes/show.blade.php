@@ -6,6 +6,7 @@ use App\Models\MaterialOrden;
 use App\Models\OrdenTrabajo;
 use App\Models\User;
 use App\Services\CierreDeVisita;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
@@ -78,12 +79,13 @@ new #[Layout('layouts.app')] class extends Component {
         ]);
 
         // Si no hay stock, el observer lanza ValidationException en creating()
-        // y no se inserta nada.
-        MaterialOrden::create([
+        // y no se inserta nada. La transacción une el descuento y su
+        // movimiento de kardex: o quedan los dos, o ninguno.
+        DB::transaction(fn () => MaterialOrden::create([
             'orden_id' => $this->orden->id,
             'material_id' => $this->material_id,
             'cantidad_usada' => $this->cantidad_usada,
-        ]);
+        ]));
 
         $this->reset('material_id');
         $this->cantidad_usada = 1;
@@ -97,7 +99,7 @@ new #[Layout('layouts.app')] class extends Component {
     {
         abort_unless($this->puedeEditar, 403);
 
-        MaterialOrden::where('orden_id', $this->orden->id)->whereKey($id)->first()?->delete();
+        DB::transaction(fn () => MaterialOrden::where('orden_id', $this->orden->id)->whereKey($id)->first()?->delete());
 
         unset($this->materiales);
         $this->recargar();
