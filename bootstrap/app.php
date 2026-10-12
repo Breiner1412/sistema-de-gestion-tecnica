@@ -15,6 +15,14 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRole::class,
         ]);
+
+        // Las IPs salen de config/trustedproxy.php (TRUSTED_PROXIES), que el
+        // middleware lee en cada petición. Aquí solo se fijan las cabeceras
+        // que manda Caddy; el resto (ELB, prefijo) no se acepta de nadie.
+        $middleware->trustProxies(headers: Request::HEADER_X_FORWARDED_FOR
+            | Request::HEADER_X_FORWARDED_HOST
+            | Request::HEADER_X_FORWARDED_PORT
+            | Request::HEADER_X_FORWARDED_PROTO);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         // Ojo: definir esto REEMPLAZA el criterio por defecto de Laravel, que es
