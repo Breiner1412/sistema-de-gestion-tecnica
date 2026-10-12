@@ -1,6 +1,7 @@
 <?php
 
 use App\Livewire\Actions\Logout;
+use App\Support\ModoDemo;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Volt\Component;
 
@@ -13,6 +14,9 @@ new class extends Component
      */
     public function deleteUser(Logout $logout): void
     {
+        // La cuenta es de todos los visitantes: borrarla rompe la demo al siguiente.
+        abort_if(ModoDemo::protege(Auth::user()), 403, 'Las cuentas de la demo no se pueden borrar.');
+
         $this->validate([
             'password' => ['required', 'string', 'current_password'],
         ]);
