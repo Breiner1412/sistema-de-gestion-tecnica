@@ -2,13 +2,15 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
+/**
+ * Con los eventos de modelo encendidos a propósito: Soporte numera el caso,
+ * deriva la criticidad y arranca el SLA en sus eventos. Sembrar sin ellos
+ * dejaba los casos demo sin número ni vencimiento, invisibles al semáforo.
+ */
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
     public function run(): void
     {
         $this->call([

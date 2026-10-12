@@ -165,7 +165,11 @@ class DemoSeeder extends Seeder
 
         for ($i = 0; $i < 90; $i++) {
             $tipo = $this->elegir(self::MEZCLA_TIPOS);
-            $creado = $this->momentoHabilAleatorio(mt_rand(1, 55));
+            $desenlace = $this->elegir(self::MEZCLA_CIERRES);
+
+            // Los abiertos son de los últimos días hábiles: con meses encima,
+            // todos saldrían vencidos y el semáforo no mostraría nada más.
+            $creado = $this->momentoHabilAleatorio($desenlace === 'abierto' ? mt_rand(1, 6) : mt_rand(1, 55));
             $cliente = $clientes->random();
 
             $esSoporte = in_array($tipo, [Soporte::TIPO_SOPORTE_REMOTO, Soporte::TIPO_SIN_INTERNET], true);
@@ -192,7 +196,6 @@ class DemoSeeder extends Seeder
             $soporte->updated_at = $creado;
             $soporte->save();
 
-            $desenlace = $this->elegir(self::MEZCLA_CIERRES);
             $tecnico = $tecnicosPonderados[array_rand($tecnicosPonderados)];
 
             $desenlace === 'abierto'
