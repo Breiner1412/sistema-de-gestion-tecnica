@@ -322,13 +322,19 @@ class Soporte extends Model
                 $cambios['tiempo_resolucion'] = $this->calendario()->minutosEntre($this->created_at, now());
             }
 
+            $reabre = in_array($anterior, self::ESTADOS_FINALES, true) && $nuevoEstado === self::ESTADO_EN_PROCESO;
+
             // Reabrir un caso cerrado devuelve el reloj a cero desde ahora.
-            if (in_array($anterior, self::ESTADOS_FINALES, true) && $nuevoEstado === self::ESTADO_EN_PROCESO) {
+            if ($reabre) {
                 $cambios['fecha_cierre'] = null;
                 $cambios['tiempo_resolucion'] = null;
             }
 
             $this->fill($cambios);
+
+            if ($reabre) {
+                $this->iniciarSla(now());
+            }
 
             // El reloj del nivel 2 solo corre mientras el caso es suyo.
             if (in_array($nuevoEstado, self::ESTADOS_QUE_PAUSAN_SLA, true)) {

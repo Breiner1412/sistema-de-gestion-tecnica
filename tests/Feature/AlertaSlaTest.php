@@ -224,3 +224,37 @@ it('la cola se vigila y una cola atascada deja un error en el registro', functio
 
     \Illuminate\Support\Facades\Log::shouldHaveReceived('error')->withArgs(fn ($mensaje) => $mensaje === 'Cola atascada');
 });
+
+it('un caso reabierto arranca un SLA nuevo y vuelve a avisar', function () {
+    $tecnico = usuarioCon(User::ROL_TECNICO_SOPORTE);
+    $caso = casoConVencimiento(now()->subMinutes(10), $tecnico);
+
+    $this->artisan('soportes:alertar-sla')->assertSuccessful();
+    expect($caso->refresh()->alerta_sla_nivel)->toBe('vencido');
+
+    $caso->cerrar(diagnosticoDePrueba()->id, 'Se ajustó el equipo.', $tecnico->id);
+    $caso->cambiarEstado(Soporte::ESTADO_EN_PROCESO, 'El abonado vuelve a reportar.', $tecnico->id);
+    $caso->refresh();
+
+    expect($caso->alerta_sla_nivel)->toBeNull()
+        ->and($caso->sla_vence_at->isFuture())->toBeTrue();
+});
+
+it('al reanudar el reloj tras una pausa se puede volver a avisar', function () {
+    $caso = casoConVencimiento(now()->addMinutes(10));
+    $caso->forceFill(['alerta_sla_nivel' => 'riesgo'])->saveQuietly();
+
+    $caso->pausarSla();
+    $caso->reanudarSla();
+
+    expect($caso->alerta_sla_nivel)->toBeNull();
+});
+
+it('elevar la criticidad reinicia el SLA y sus avisos', function () {
+    $caso = casoConVencimiento(now()->subMinutes(10));
+    $caso->forceFill(['alerta_sla_nivel' => 'vencido'])->saveQuietly();
+
+    $caso->elevarCriticidad('Cliente corporativo sin servicio.');
+
+    expect($caso->refresh()->alerta_sla_nivel)->toBeNull();
+});

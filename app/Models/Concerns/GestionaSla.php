@@ -4,6 +4,7 @@ namespace App\Models\Concerns;
 
 use App\Support\CalendarioHabil;
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 
 /**
  * Reloj de SLA del nivel 2, medido en tiempo hábil.
@@ -34,9 +35,14 @@ trait GestionaSla
         return (int) round($config['resolucion'] * 60);
     }
 
-    public function iniciarSla(): void
+    /**
+     * Arranca el reloj desde que entró el caso, o desde $desde cuando se
+     * reabre. Un reloj nuevo es un SLA nuevo: los avisos ya enviados no
+     * cuentan para él.
+     */
+    public function iniciarSla(?CarbonInterface $desde = null): void
     {
-        $desde = CarbonImmutable::instance($this->created_at ?? now());
+        $desde = CarbonImmutable::instance($desde ?? $this->created_at ?? now());
         $config = config("sla.tiempos.{$this->criticidad}", config('sla.tiempos.normal'));
 
         $vence = ($config['unidad'] ?? 'horas') === 'dias'
@@ -47,6 +53,8 @@ trait GestionaSla
             'sla_vence_at' => $vence,
             'sla_pausado_at' => null,
             'sla_minutos_restantes' => null,
+            'alerta_sla_nivel' => null,
+            'alerta_sla_at' => null,
         ]);
     }
 
@@ -72,6 +80,10 @@ trait GestionaSla
             'sla_vence_at' => $this->calendario()->sumarMinutos(now(), (int) $this->sla_minutos_restantes),
             'sla_pausado_at' => null,
             'sla_minutos_restantes' => null,
+            // Tras la pausa (visita, redes, cliente) el caso vuelve a ser del
+            // técnico: si está en riesgo, que se le avise otra vez.
+            'alerta_sla_nivel' => null,
+            'alerta_sla_at' => null,
         ]);
     }
 
