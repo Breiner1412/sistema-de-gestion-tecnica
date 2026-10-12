@@ -2,9 +2,11 @@
 
 use App\Models\Tecnico;
 use App\Models\User;
+use App\Support\ModoDemo;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 
@@ -38,11 +40,14 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function guardar()
     {
+        // mount() solo corre en la primera carga: cada acción vuelve a preguntar.
+        abort_unless(auth()->user()->esAdmin(), 403);
+
         $reglas = [
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users')->ignore($this->usuario)],
-            'rol' => [Rule::in(array_keys(User::ROLES))],
-            'estado' => [Rule::in(['activo', 'inactivo'])],
+            'rol' => ['required', Rule::in(array_keys(User::ROLES))],
+            'estado' => ['required', Rule::in(['activo', 'inactivo'])],
             'telefono' => ['nullable', 'string', 'max:30'],
         ];
 
@@ -56,6 +61,9 @@ new #[Layout('layouts.app')] class extends Component {
             'email' => 'correo',
             'password' => 'contraseña',
         ]);
+
+        $this->protegerAdministracion($datos);
+        $this->protegerCuentaDemo($datos);
 
         $atributos = [
             'name' => $datos['name'],
@@ -77,6 +85,54 @@ new #[Layout('layouts.app')] class extends Component {
         session()->flash('mensaje', $this->usuario ? 'Usuario actualizado.' : 'Usuario creado.');
 
         return $this->redirect(route('usuarios.index'), navigate: true);
+    }
+
+    /**
+     * Nadie se quita a sí mismo la administración, y el sistema nunca se queda
+     * sin un administrador activo: sin él no hay quien cree ni reactive cuentas.
+     */
+    private function protegerAdministracion(array $datos): void
+    {
+        if (! $this->usuario?->esAdmin()) {
+            return;
+        }
+
+        $dejaDeSerAdmin = $datos['rol'] !== User::ROL_ADMIN || $datos['estado'] !== 'activo';
+
+        if (! $dejaDeSerAdmin) {
+            return;
+        }
+
+        if ($this->usuario->is(auth()->user())) {
+            throw ValidationException::withMessages([
+                'rol' => 'No puedes quitarte el rol de administrador ni desactivar tu propia cuenta.',
+            ]);
+        }
+
+        $quedanOtros = User::where('rol', User::ROL_ADMIN)
+            ->where('estado', 'activo')
+            ->whereKeyNot($this->usuario->id)
+            ->exists();
+
+        if (! $quedanOtros) {
+            throw ValidationException::withMessages([
+                'rol' => 'Es el último administrador activo: el sistema no puede quedarse sin uno.',
+            ]);
+        }
+    }
+
+    /** En la demo, las cuentas compartidas conservan su correo y su clave. */
+    private function protegerCuentaDemo(array $datos): void
+    {
+        if (! $this->usuario || ! ModoDemo::protege($this->usuario)) {
+            return;
+        }
+
+        if ($datos['email'] !== $this->usuario->email || filled($datos['password'] ?? null)) {
+            throw ValidationException::withMessages([
+                'email' => 'En la demo no se puede cambiar el correo ni la contraseña de las cuentas de prueba.',
+            ]);
+        }
     }
 
     /**
