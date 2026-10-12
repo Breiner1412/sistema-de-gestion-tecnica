@@ -48,6 +48,7 @@ class CalendarioHabil
 
     public function esFestivo(CarbonInterface $fecha): bool
     {
+        $fecha = $this->local($fecha);
         $clave = $fecha->format('Y-m-d');
 
         return isset(static::festivosColombia((int) $fecha->year)[$clave])
@@ -56,6 +57,8 @@ class CalendarioHabil
 
     public function esDiaHabil(CarbonInterface $fecha): bool
     {
+        $fecha = $this->local($fecha);
+
         return in_array($fecha->dayOfWeekIso, $this->diasHabiles, true)
             && !$this->esFestivo($fecha);
     }
@@ -70,7 +73,7 @@ class CalendarioHabil
      */
     public function siguienteHabil(CarbonInterface $desde): CarbonImmutable
     {
-        $cursor = CarbonImmutable::instance($desde);
+        $cursor = $this->local($desde);
 
         for ($i = 0; $i < self::MAX_DIAS; $i++) {
             if (!$this->esDiaHabil($cursor)) {
@@ -140,8 +143,8 @@ class CalendarioHabil
     /** Minutos hábiles transcurridos entre dos instantes (0 si el orden se invierte). */
     public function minutosEntre(CarbonInterface $desde, CarbonInterface $hasta): int
     {
-        $inicio = CarbonImmutable::instance($desde);
-        $fin = CarbonImmutable::instance($hasta);
+        $inicio = $this->local($desde);
+        $fin = $this->local($hasta);
 
         if ($fin <= $inicio) {
             return 0;
@@ -160,6 +163,17 @@ class CalendarioHabil
         }
 
         return $total;
+    }
+
+    /**
+     * La jornada se mide en la hora de la operación. Una fecha que llegue en
+     * otra zona (UTC desde la base, por ejemplo) se pasa primero a la local:
+     * las 20:00 UTC son las 15:00 en Bogotá, dentro de la jornada.
+     */
+    private function local(CarbonInterface $fecha): CarbonImmutable
+    {
+        // Laravel fija la zona de PHP desde app.timezone al arrancar.
+        return CarbonImmutable::instance($fecha)->setTimezone(date_default_timezone_get());
     }
 
     /* ---------------------------------------------------------------

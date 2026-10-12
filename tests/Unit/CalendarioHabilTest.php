@@ -98,3 +98,17 @@ describe('aritmética de tiempo hábil', function () {
         expect($minutos)->toBe(11 * 60);
     });
 });
+
+it('mide la jornada en la hora local aunque la fecha llegue en UTC', function () {
+    $zonaAnterior = date_default_timezone_get();
+    date_default_timezone_set('America/Bogota');
+    $calendario = new \App\Support\CalendarioHabil(7, 18, [1, 2, 3, 4, 5], []);
+
+    // Martes 13 de octubre de 2026, 20:00 UTC = 15:00 en Bogotá: dentro de la jornada.
+    $utc = \Carbon\CarbonImmutable::parse('2026-10-13 20:00:00', 'UTC');
+
+    expect($calendario->siguienteHabil($utc)->format('Y-m-d H:i'))->toBe('2026-10-13 15:00')
+        ->and($calendario->minutosEntre($utc, $utc->addHours(2)))->toBe(120);
+
+    date_default_timezone_set($zonaAnterior);
+});
