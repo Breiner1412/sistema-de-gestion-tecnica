@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Support\ModoDemo;
 use Illuminate\Database\Seeder;
 
 /**
@@ -18,8 +19,9 @@ class DatabaseSeeder extends Seeder
             UsuarioSeeder::class,
         ]);
 
-        // Datos de prueba solo fuera de producción.
-        if (!app()->environment('production')) {
+        // Datos de prueba fuera de producción, o en la demo pública, que corre
+        // con APP_ENV=production pero existe justamente para mostrarlos.
+        if (! app()->isProduction() || ModoDemo::activo()) {
             $this->call(DemoSeeder::class);
         }
     }

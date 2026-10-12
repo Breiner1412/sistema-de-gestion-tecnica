@@ -29,3 +29,17 @@ it('la demo deja casos abiertos que el semáforo puede ver', function () {
     expect($abiertos)->not->toBeEmpty()
         ->and($abiertos->map->semaforoSla()->unique()->count())->toBeGreaterThan(1);
 });
+
+it('en producción solo siembra la demo si el modo demo está activo', function (bool $demo, bool $esperaCasos) {
+    Soporte::query()->forceDelete();
+    config(['demo.activo' => $demo]);
+    app()->detectEnvironment(fn () => 'production');
+
+    // Directo: db:seed pediría confirmación en producción.
+    app(DatabaseSeeder::class)->run();
+
+    expect(Soporte::exists())->toBe($esperaCasos);
+})->with([
+    'demo pública' => [true, true],
+    'producción real' => [false, false],
+]);

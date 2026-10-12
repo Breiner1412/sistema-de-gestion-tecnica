@@ -18,7 +18,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
 
 /**
- * Datos de demostración. No debe ejecutarse en producción.
+ * Datos de demostración. En producción solo corre con DEMO_MODE=true.
  *
  * Todos los clientes son SINTÉTICOS: nombres, cédulas y teléfonos inventados.
  * Lo que se conserva del caso real son las proporciones — qué porcentaje de
