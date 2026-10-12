@@ -19,6 +19,18 @@ return [
     'dominio' => 'sgt.local',
 
     /*
+    | Cuentas que el login muestra en modo demo, una por rol. Ninguna es de
+    | administrador: aunque se agregue una aquí, ModoDemo la descarta.
+    */
+    'cuentas_publicas' => [
+        'gerencia@sgt.local',
+        'andres.arango@sgt.local',
+        'andres.duarte@sgt.local',
+        'redes1@sgt.local',
+        'campo1@sgt.local',
+    ],
+
+    /*
     |--------------------------------------------------------------------------
     | Contraseña de las cuentas de demostración
     |--------------------------------------------------------------------------

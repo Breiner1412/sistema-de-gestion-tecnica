@@ -413,6 +413,10 @@ clave aleatoria y no se puede entrar con ellas.
 Los técnicos de soporte y los asesores de primer nivel usan el patrón
 `nombre.apellido@sgt.local`; se listan en `database/seeders/UsuarioSeeder.php`.
 
+Con `DEMO_MODE=true` el login publica una cuenta por rol (ninguna de administrador) con su
+clave, y esas cuentas no se pueden borrar ni cambiarles el correo, el nombre o la contraseña.
+La lista está en `config/demo.php`.
+
 ### Configuración del SLA
 
 Todo lo ajustable vive en `config/sla.php`: jornada laboral, tiempos por criticidad,

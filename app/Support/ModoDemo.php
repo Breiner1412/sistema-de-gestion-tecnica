@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\User;
+use Illuminate\Support\Collection;
 
 /**
  * La demo pública comparte cuentas entre desconocidos. Lo que aquí se decide
@@ -37,6 +38,28 @@ class ModoDemo
 
         return str_ends_with(mb_strtolower($usuario->email), $dominio)
             || mb_strtolower($usuario->email) === mb_strtolower((string) config('cuentas.admin.email'));
+    }
+
+    /**
+     * Las cuentas que se publican en el login. Nunca una de administrador:
+     * la administración no se reparte entre desconocidos.
+     *
+     * @return Collection<int, User>
+     */
+    public static function cuentasPublicas(): Collection
+    {
+        if (! self::activo()) {
+            return collect();
+        }
+
+        $orden = array_flip(config('demo.cuentas_publicas', []));
+
+        return User::whereIn('email', array_keys($orden))
+            ->where('rol', '!=', User::ROL_ADMIN)
+            ->where('estado', 'activo')
+            ->get()
+            ->sortBy(fn (User $usuario) => $orden[$usuario->email])
+            ->values();
     }
 
     /** ¿Se protege esta cuenta de cambios hechos desde la propia demo? */
