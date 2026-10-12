@@ -398,11 +398,13 @@ se engancha.
 
 ### Cuentas de prueba
 
+El administrador no viene sembrado con datos fijos: se crea con `ADMIN_EMAIL` y
+`ADMIN_PASSWORD` del `.env` (sin ellos no hay admin).
+
 Todas con contraseña `cambiar123`.
 
 | Correo | Rol |
 |---|---|
-| `admin@sgt.local` | Administrador |
 | `gerencia@sgt.local` | Gerente |
 | `redes1@sgt.local` | Ingeniero de redes (N3) |
 | `campo1@sgt.local` | Técnico de campo |

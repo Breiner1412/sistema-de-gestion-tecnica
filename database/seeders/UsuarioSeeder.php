@@ -15,17 +15,20 @@ use Illuminate\Support\Facades\Hash;
  * la forma del equipo (21 en nivel 2, 28 en primer nivel), que es conocimiento
  * del dominio; los nombres de personas reales no van en un proyecto público.
  *
- * Contraseña inicial para todos: "cambiar123".
+ * El administrador sale del .env (config/cuentas.php): ningún correo real ni
+ * contraseña de administrador vive en el código.
+ *
+ * Contraseña inicial para el resto: "cambiar123".
  */
 class UsuarioSeeder extends Seeder
 {
     public function run(): void
     {
+        $this->administrador();
+
         $clave = Hash::make('cambiar123');
 
-        $this->crear('Administrador SGT', 'admin@sgt.local', User::ROL_ADMIN, $clave);
         $this->crear('Gerencia Técnica', 'gerencia@sgt.local', User::ROL_GERENTE, $clave);
-        $this->crear('Breiner Rodriguez', 'rodriguezbreiner125@gmail.com', User::ROL_ADMIN, $clave);
 
         // Nivel 2: los que el Excel llamaba "ingenieros" son técnicos de soporte.
         $tecnicosSoporte = [
@@ -104,6 +107,37 @@ class UsuarioSeeder extends Seeder
                 'estado' => 'activo',
             ]);
         }
+    }
+
+    /**
+     * Se actualiza en cada siembra: el .env manda. Si alguien cambia la clave
+     * del admin en el .env, la próxima siembra la aplica.
+     */
+    private function administrador(): void
+    {
+        $email = config('cuentas.admin.email');
+        $clave = config('cuentas.admin.password');
+
+        if (blank($email) || blank($clave)) {
+            $this->command?->warn('Sin ADMIN_EMAIL o ADMIN_PASSWORD en el .env: no se crea el administrador.');
+
+            return;
+        }
+
+        if (app()->isProduction() && mb_strlen($clave) < config('cuentas.longitud_minima_admin')) {
+            throw new \RuntimeException(sprintf(
+                'ADMIN_PASSWORD debe tener al menos %d caracteres en producción.',
+                config('cuentas.longitud_minima_admin'),
+            ));
+        }
+
+        User::updateOrCreate(['email' => $email], [
+            'name' => config('cuentas.admin.nombre'),
+            'password' => $clave,
+            'rol' => User::ROL_ADMIN,
+            'estado' => 'activo',
+            'email_verified_at' => now(),
+        ]);
     }
 
     private function crear(string $nombre, string $email, string $rol, string $clave): User
