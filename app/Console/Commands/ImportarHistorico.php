@@ -224,6 +224,13 @@ class ImportarHistorico extends Command
             $inmediato = $fila['tipo_solicitud'] === Soporte::TIPO_SIN_INTERNET
                 || ($fila['falla'] && in_array($fila['falla'], $criticas, true));
 
+            $vence = $cerrado ? null : $this->vencimiento($calendario, $ingreso, $inmediato);
+
+            // Lo abierto del histórico venció hace meses: se da por avisado
+            // para que la primera corrida de soportes:alertar-sla no mande un
+            // correo con cientos de casos viejos a gestión.
+            $yaVencido = $vence?->isPast() ?? false;
+
             $lote[] = [
                 'numero_soporte' => sprintf('SGT-%d-%06d', $anio, $consecutivos[$anio]),
                 'cliente_id' => $clienteId,
@@ -248,7 +255,9 @@ class ImportarHistorico extends Command
                 'tiempo_respuesta' => null,
                 'tiempo_resolucion' => $cerrado && $cierre ? $calendario->minutosEntre($ingreso, $cierre) : null,
                 'fecha_cierre' => $cerrado ? ($cierre ?? $ingreso) : null,
-                'sla_vence_at' => $cerrado ? null : $this->vencimiento($calendario, $ingreso, $inmediato),
+                'sla_vence_at' => $vence?->format('Y-m-d H:i:s'),
+                'alerta_sla_nivel' => $yaVencido ? 'vencido' : null,
+                'alerta_sla_at' => $yaVencido ? now() : null,
                 'intentos_contacto' => $estado === Soporte::ESTADO_CERRADO_SIN_CONTACTO ? 3 : 0,
                 'created_at' => $ingreso,
                 'updated_at' => $cierre ?? $ingreso,
@@ -319,15 +328,13 @@ class ImportarHistorico extends Command
         return $consecutivos;
     }
 
-    private function vencimiento(CalendarioHabil $calendario, CarbonImmutable $ingreso, bool $inmediato): string
+    private function vencimiento(CalendarioHabil $calendario, CarbonImmutable $ingreso, bool $inmediato): CarbonImmutable
     {
         $config = config($inmediato ? 'sla.tiempos.inmediata' : 'sla.tiempos.normal');
 
-        $vence = ($config['unidad'] ?? 'horas') === 'dias'
+        return ($config['unidad'] ?? 'horas') === 'dias'
             ? $calendario->sumarDias($ingreso, (int) $config['resolucion'])
             : $calendario->sumarHoras($ingreso, (float) $config['resolucion']);
-
-        return $vence->format('Y-m-d H:i:s');
     }
 
     /** El texto libre del Excel se descartó: se reconstruye una descripción neutra. */

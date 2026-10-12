@@ -169,3 +169,22 @@ it('respeta el límite cuando se le pide', function () {
 
     expect(Soporte::count())->toBe(2);
 });
+
+it('los casos abiertos del histórico no disparan alertas de SLA', function () {
+    \Illuminate\Support\Facades\Notification::fake();
+    config(['sla.alertas.activas' => true]);
+    usuarioCon(User::ROL_ADMIN);
+
+    importar([
+        ['C100001', 'sin_internet', 'caja', 'internet', '', '',
+            'pendiente', '2026-03-10 09:00:00', '', '0', '0', ''],
+        ['C100002', 'soporte_remoto', 'caja', 'internet', 'LENTITUD E INTERMITENCIA', '',
+            'seguimiento', '2026-03-11 09:00:00', '', '0', '1', ''],
+    ]);
+
+    expect(Soporte::where('alerta_sla_nivel', 'vencido')->count())->toBe(2);
+
+    $this->artisan('soportes:alertar-sla')->assertSuccessful();
+
+    \Illuminate\Support\Facades\Notification::assertNothingSent();
+});
