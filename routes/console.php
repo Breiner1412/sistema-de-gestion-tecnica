@@ -13,18 +13,22 @@ Artisan::command('inspire', function () {
 |--------------------------------------------------------------------------
 | Tareas programadas
 |--------------------------------------------------------------------------
-| En el servidor hace falta una sola entrada de cron:
+| En Docker lo corre el contenedor soporte-tareas con `schedule:work`; en un
+| servidor sin Docker, una entrada de cron con `schedule:run` cada minuto.
 |
-|   * * * * * cd /ruta/del/proyecto && php artisan schedule:run >> /dev/null 2>&1
-|
-| En local se puede dejar corriendo `php artisan schedule:work`.
+| El bloqueo de withoutOverlapping() vive en la caché (la base de datos,
+| compartida por todos los contenedores) y caduca solo: sin un tiempo, un
+| proceso que muere con el contenedor lo deja tomado 24 horas y las alertas
+| dejan de salir sin que nadie lo note. onOneServer() evita el doble envío
+| si algún día corren dos programadores.
 */
 
 // Devuelve a la cola los casos sin contacto cuyo reintento ya venció.
 // Cada cuarto de hora es suficiente: la política los espacia cuatro horas.
 Schedule::command('soportes:reintentar-contacto')
     ->everyFifteenMinutes()
-    ->withoutOverlapping()
+    ->withoutOverlapping(10)
+    ->onOneServer()
     ->runInBackground();
 
 // Avisa de lo que está por vencerse. Solo en horario hábil: el reloj está
@@ -33,7 +37,8 @@ Schedule::command('soportes:alertar-sla')
     ->hourly()
     ->weekdays()
     ->between('7:00', '18:00')
-    ->withoutOverlapping()
+    ->withoutOverlapping(10)
+    ->onOneServer()
     ->runInBackground();
 
 // Demo pública: todo vuelve a su estado de fábrica cada noche. El login
