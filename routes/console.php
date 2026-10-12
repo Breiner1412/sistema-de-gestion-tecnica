@@ -41,6 +41,12 @@ Schedule::command('soportes:alertar-sla')
     ->onOneServer()
     ->runInBackground();
 
+// La cola de correos atascada (sin worker o con el SMTP caído) no da error en
+// ningún lado: esto deja una línea de error en el registro si se acumula.
+Schedule::command('queue:monitor', ['database:default', '--max' => 50])
+    ->everyFiveMinutes()
+    ->onOneServer();
+
 // Demo pública: todo vuelve a su estado de fábrica cada noche. El login
 // avisa la hora. Fuera del modo demo ni se programa (y el comando se niega).
 Schedule::command('demo:reiniciar')

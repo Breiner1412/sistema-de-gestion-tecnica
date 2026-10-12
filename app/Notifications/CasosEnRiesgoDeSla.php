@@ -77,18 +77,14 @@ class CasosEnRiesgoDeSla extends Notification implements ShouldQueue
         if ($this->vencidos->isNotEmpty()) {
             $mensaje->line('**Ya se pasaron del tiempo acordado:**');
 
-            foreach ($this->vencidos as $caso) {
-                $mensaje->line($this->linea($caso, 'vencido'));
-            }
+            $this->listar($mensaje, $this->vencidos, fn (Soporte $caso) => 'vencido');
         }
 
         if ($this->enRiesgo->isNotEmpty()) {
             $mensaje->line($this->vencidos->isNotEmpty() ? ' ' : '');
             $mensaje->line('**Están por vencerse:**');
 
-            foreach ($this->enRiesgo as $caso) {
-                $mensaje->line($this->linea($caso, $caso->restanteLegible()));
-            }
+            $this->listar($mensaje, $this->enRiesgo, fn (Soporte $caso) => $caso->restanteLegible());
         }
 
         $unico = $this->vencidos->count() + $this->enRiesgo->count() === 1;
@@ -101,6 +97,23 @@ class CasosEnRiesgoDeSla extends Notification implements ShouldQueue
                     : route('soportes.index'),
             )
             ->line('El reloj solo corre en horario hábil y se detiene mientras el caso espera una visita, una respuesta de redes o al cliente.');
+    }
+
+    /**
+     * Un correo con cien líneas no lo lee nadie: se listan los primeros y el
+     * resto se resume, con el enlace a la bandeja al final.
+     */
+    private function listar(MailMessage $mensaje, Collection $casos, \Closure $reloj): void
+    {
+        $tope = max(1, (int) config('sla.alertas.max_por_correo', 20));
+
+        foreach ($casos->take($tope) as $caso) {
+            $mensaje->line($this->linea($caso, $reloj($caso)));
+        }
+
+        if ($casos->count() > $tope) {
+            $mensaje->line(sprintf('… y %d más en la bandeja.', $casos->count() - $tope));
+        }
     }
 
     /** "TCF-000412 · Marta Ospina · Sin internet · vencido" */

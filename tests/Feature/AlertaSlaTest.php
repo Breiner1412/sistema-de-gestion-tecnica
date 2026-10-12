@@ -200,3 +200,27 @@ it('la notificación reintenta con espera antes de rendirse', function () {
         ->and($notificacion->backoff)->toBe([60, 300])
         ->and($notificacion)->toBeInstanceOf(\Illuminate\Contracts\Queue\ShouldQueue::class);
 });
+
+it('un correo con muchos casos lista los primeros y resume el resto', function () {
+    config(['sla.alertas.max_por_correo' => 3]);
+    $tecnico = usuarioCon(User::ROL_TECNICO_SOPORTE);
+    $casos = collect(range(1, 5))->map(fn () => casoConVencimiento(now()->subMinute(), $tecnico));
+
+    $correo = (new CasosEnRiesgoDeSla($casos, collect()))->toMail($tecnico);
+    $lineas = collect($correo->introLines);
+
+    expect($lineas->filter(fn ($l) => str_ends_with($l, '· vencido'))->count())->toBe(3)
+        ->and($lineas->contains('… y 2 más en la bandeja.'))->toBeTrue();
+});
+
+it('la cola se vigila y una cola atascada deja un error en el registro', function () {
+    $evento = collect(app(\Illuminate\Console\Scheduling\Schedule::class)->events())
+        ->first(fn ($e) => str_contains($e->command, 'queue:monitor'));
+
+    expect($evento)->not->toBeNull();
+
+    \Illuminate\Support\Facades\Log::spy();
+    event(new \Illuminate\Queue\Events\QueueBusy('database', 'default', 80));
+
+    \Illuminate\Support\Facades\Log::shouldHaveReceived('error')->withArgs(fn ($mensaje) => $mensaje === 'Cola atascada');
+});
