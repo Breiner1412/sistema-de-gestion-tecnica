@@ -48,3 +48,24 @@ it('rechaza una clave de admin corta en producción', function () {
     expect(fn () => app(UsuarioSeeder::class)->run())
         ->toThrow(RuntimeException::class, 'ADMIN_PASSWORD');
 });
+
+it('las cuentas demo usan la clave de DEMO_PASSWORD', function () {
+    config(['demo.password' => 'clave-demo-de-prueba']);
+
+    $this->seed(UsuarioSeeder::class);
+
+    $gerencia = User::where('email', 'gerencia@sgt.local')->first();
+
+    expect(Hash::check('clave-demo-de-prueba', $gerencia->password))->toBeTrue();
+});
+
+it('sin DEMO_PASSWORD las cuentas demo no tienen una clave conocida', function () {
+    config(['demo.password' => null]);
+
+    $this->seed(UsuarioSeeder::class);
+
+    $gerencia = User::where('email', 'gerencia@sgt.local')->first();
+
+    expect(Hash::check('cambiar123', $gerencia->password))->toBeFalse()
+        ->and(Hash::check('', $gerencia->password))->toBeFalse();
+});

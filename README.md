@@ -401,7 +401,8 @@ se engancha.
 El administrador no viene sembrado con datos fijos: se crea con `ADMIN_EMAIL` y
 `ADMIN_PASSWORD` del `.env` (sin ellos no hay admin).
 
-Todas con contraseña `cambiar123`.
+Todas con la contraseña de `DEMO_PASSWORD` del `.env`; si no se define, quedan con una
+clave aleatoria y no se puede entrar con ellas.
 
 | Correo | Rol |
 |---|---|

@@ -6,6 +6,7 @@ use App\Models\Tecnico;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 /**
  * Equipo de la operación con los roles del flujo real:
@@ -18,7 +19,8 @@ use Illuminate\Support\Facades\Hash;
  * El administrador sale del .env (config/cuentas.php): ningún correo real ni
  * contraseña de administrador vive en el código.
  *
- * Contraseña inicial para el resto: "cambiar123".
+ * El resto son cuentas de demostración con la clave DEMO_PASSWORD
+ * (config/demo.php); sin ella, una clave aleatoria que nadie conoce.
  */
 class UsuarioSeeder extends Seeder
 {
@@ -26,7 +28,7 @@ class UsuarioSeeder extends Seeder
     {
         $this->administrador();
 
-        $clave = Hash::make('cambiar123');
+        $clave = Hash::make($this->claveDemo());
 
         $this->crear('Gerencia Técnica', 'gerencia@sgt.local', User::ROL_GERENTE, $clave);
 
@@ -138,6 +140,19 @@ class UsuarioSeeder extends Seeder
             'estado' => 'activo',
             'email_verified_at' => now(),
         ]);
+    }
+
+    private function claveDemo(): string
+    {
+        $clave = config('demo.password');
+
+        if (filled($clave)) {
+            return $clave;
+        }
+
+        $this->command?->warn('Sin DEMO_PASSWORD en el .env: las cuentas demo quedan con una clave aleatoria.');
+
+        return Str::password(40);
     }
 
     private function crear(string $nombre, string $email, string $rol, string $clave): User
