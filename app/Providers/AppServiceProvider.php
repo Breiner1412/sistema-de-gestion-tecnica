@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Models\MaterialOrden;
 use App\Observers\MaterialOrdenObserver;
+use App\Support\ModoDemo;
 use App\Support\PerfilDeConsultas;
 use Illuminate\Support\ServiceProvider;
 
@@ -23,6 +24,8 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         MaterialOrden::observe(MaterialOrdenObserver::class);
+
+        ModoDemo::aplicar();
 
         // Solo hace algo con PERFIL_CONSULTAS=true; apagado, ni se engancha.
         PerfilDeConsultas::escuchar();

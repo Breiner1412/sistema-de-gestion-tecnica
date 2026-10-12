@@ -4,6 +4,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Modo demo
+    |--------------------------------------------------------------------------
+    | Para la demo pública de portafolio. Con DEMO_MODE=true:
+    |  - el correo va al registro, nunca a un buzón real;
+    |  - las cuentas sembradas no se pueden borrar ni cambiarles la clave o
+    |    el correo desde la aplicación;
+    |  - el login publica las cuentas de prueba y avisa del reinicio nocturno.
+    */
+
+    'activo' => (bool) env('DEMO_MODE', false),
+
+    /** Dominio de las cuentas sembradas por UsuarioSeeder. */
+    'dominio' => 'sgt.local',
+
+    /*
+    |--------------------------------------------------------------------------
     | Contraseña de las cuentas de demostración
     |--------------------------------------------------------------------------
     | Todas las cuentas sembradas (@sgt.local) comparten esta clave. Sale del
