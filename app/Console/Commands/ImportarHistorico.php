@@ -280,6 +280,12 @@ class ImportarHistorico extends Command
         $barra->finish();
         $this->newLine(2);
 
+        // Los números se pusieron aquí, sin pasar por el contador: se le
+        // avisa, o la próxima alta desde la pantalla chocaría con ellos.
+        foreach (array_keys($consecutivos) as $anio) {
+            Soporte::sincronizarSecuencia($anio);
+        }
+
         $this->info("Importados {$importados} casos.".($omitidos ? " Omitidos {$omitidos} por datos incompletos." : ''));
         $this->line('  El canal de ingreso es simulado y el tiempo de respuesta queda vacío:');
         $this->line('  ninguno de los dos existía en el Excel original.');

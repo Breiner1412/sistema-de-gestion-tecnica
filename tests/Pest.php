@@ -144,3 +144,40 @@ function cierreCompleto(array $extra = []): array
         'observaciones' => 'Se cambió el conector de la acometida y quedó en -18 dBm.',
     ], $extra);
 }
+
+/** Escribe un par de CSV temporales con el mismo formato que los del histórico. */
+function csvDePrueba(array $casos): array
+{
+    $carpeta = sys_get_temp_dir().'/sgt-'.uniqid();
+    mkdir($carpeta);
+
+    $clientes = $carpeta.'/clientes.csv';
+    $fh = fopen($clientes, 'w');
+    fputcsv($fh, ['codigo_abonado', 'cedula', 'nombre', 'telefono']);
+    fputcsv($fh, ['C100001', '1090000001', 'Ana Acosta Franco', '3105000001']);
+    fputcsv($fh, ['C100002', '1090000002', 'Carlos Bermúdez Nieto', '3105000002']);
+    fclose($fh);
+
+    $archivo = $carpeta.'/casos.csv';
+    $fh = fopen($archivo, 'w');
+    fputcsv($fh, ['codigo_abonado', 'tipo_solicitud', 'canal_ingreso', 'servicio_afectado', 'falla',
+        'diagnostico', 'estado', 'fecha_ingreso', 'fecha_cierre', 'asesor_idx', 'tecnico_idx', 'escalado']);
+
+    foreach ($casos as $caso) {
+        fputcsv($fh, $caso);
+    }
+
+    fclose($fh);
+
+    return [$archivo, $clientes];
+}
+
+function importar(array $casos): void
+{
+    [$archivo, $clientes] = csvDePrueba($casos);
+
+    test()->artisan('soportes:importar-historico', [
+        '--casos' => $archivo,
+        '--clientes' => $clientes,
+    ])->assertSuccessful();
+}
