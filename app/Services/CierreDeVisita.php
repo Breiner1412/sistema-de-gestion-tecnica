@@ -7,6 +7,7 @@ use App\Models\Evidencia;
 use App\Models\MaterialOrden;
 use App\Models\OrdenTrabajo;
 use App\Models\Soporte;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -60,16 +61,13 @@ class CierreDeVisita
     {
         $uuid = $datos['uuid'] ?? null;
 
-        // El mismo envío otra vez: se responde que sí y no se toca nada.
+        // Un vistazo rápido antes de escribir fotos en disco. No decide nada:
+        // la comprobación que manda es la de dentro de la transacción.
         if ($uuid && $this->orden->cierre_uuid === $uuid) {
             return $this->respuesta(repetido: true);
         }
 
-        if (! $this->orden->estaAbierta()) {
-            throw ValidationException::withMessages([
-                'estado' => 'Esta visita ya fue cerrada por otra persona.',
-            ]);
-        }
+        $this->exigirAbierta();
 
         $archivos = [];
 
@@ -83,12 +81,37 @@ class CierreDeVisita
             $fotos = $this->guardarFotos($datos['fotos'] ?? []);
             $archivos = array_merge($archivos, array_column($fotos, 'ruta'));
 
-            DB::transaction(function () use ($datos, $uuid, $firma, $fotos) {
+            $repetido = DB::transaction(function () use ($datos, $uuid, $firma, $fotos) {
+                // Dos envíos simultáneos (el reintento del teléfono con mala
+                // señal) leen la orden antes de que el otro la cierre. Con el
+                // bloqueo, el segundo espera, la vuelve a leer ya cerrada y no
+                // cierra ni descuenta material dos veces.
+                $this->orden->setRawAttributes(
+                    OrdenTrabajo::lockForUpdate()->findOrFail($this->orden->id)->getAttributes(),
+                    true,
+                );
+
+                if ($uuid && $this->orden->cierre_uuid === $uuid) {
+                    return true;
+                }
+
+                $this->exigirAbierta();
+
                 $this->actualizarOrden($datos, $uuid, $firma);
                 $this->registrarEvidencias($fotos, $datos);
                 $this->registrarMateriales($datos['materiales'] ?? []);
                 $this->moverElCaso($datos);
+
+                return false;
             });
+        } catch (UniqueConstraintViolationException) {
+            Storage::disk('public')->delete($archivos);
+
+            // El uuid lo pone el teléfono: si ya lo usó otra visita, el error
+            // es del envío, no del servidor.
+            throw ValidationException::withMessages([
+                'uuid' => 'Este cierre ya se registró en otra visita.',
+            ]);
         } catch (\Throwable $e) {
             // Sin esto, cada reintento fallido deja fotos huérfanas en disco.
             Storage::disk('public')->delete($archivos);
@@ -96,7 +119,21 @@ class CierreDeVisita
             throw $e;
         }
 
-        return $this->respuesta(repetido: false);
+        if ($repetido) {
+            // Las fotos de este envío sobran: ya las guardó el que llegó primero.
+            Storage::disk('public')->delete($archivos);
+        }
+
+        return $this->respuesta(repetido: $repetido);
+    }
+
+    private function exigirAbierta(): void
+    {
+        if (! $this->orden->estaAbierta()) {
+            throw ValidationException::withMessages([
+                'estado' => 'Esta visita ya fue cerrada por otra persona.',
+            ]);
+        }
     }
 
     /* ---------------------------------------------------------------

@@ -2,11 +2,14 @@
 
 use App\Models\Cliente;
 use App\Models\Diagnostico;
+use App\Models\OrdenTrabajo;
 use App\Models\Soporte;
+use App\Models\Tecnico;
 use App\Models\TipoFalla;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 pest()->extend(TestCase::class)
@@ -90,4 +93,54 @@ function soporteDePrueba(array $atributos = []): Soporte
         'descripcion' => 'El abonado reporta lentitud desde ayer en la noche.',
         'estado' => Soporte::ESTADO_PENDIENTE,
     ], $atributos));
+}
+
+/*
+ * Imágenes de verdad, minúsculas y escritas a mano: no se genera nada con GD
+ * para que las pruebas no dependan de una extensión instalada.
+ */
+const PNG_MINIMO = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAFUlEQVR4nGNkYGD4z4AEmBjQAGEBAEEUAQeklUeXAAAAAElFTkSuQmCC';
+
+const JPEG_MINIMO = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAAEAAQDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAn/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFAEBAAAAAAAAAAAAAAAAAAAAAP/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/AJ//2Q==';
+
+/** Lo que manda el teléfono es una data URL en base64, no una ruta. */
+function fotoDePrueba(): string
+{
+    return 'data:image/jpeg;base64,'.JPEG_MINIMO;
+}
+
+/** Una visita programada, con su técnico y su caso ya enviado a terreno. */
+function visitaDePrueba(?User $usuario = null, array $atributos = []): OrdenTrabajo
+{
+    $usuario ??= usuarioCon(User::ROL_TECNICO_CAMPO, 'Técnico de campo');
+
+    $tecnico = Tecnico::create([
+        'user_id' => $usuario->id,
+        'nombre' => $usuario->name,
+        'estado' => 'activo',
+    ]);
+
+    $soporte = soporteDePrueba();
+    $soporte->cambiarEstado(Soporte::ESTADO_EN_PROCESO);
+    $soporte->cambiarEstado(Soporte::ESTADO_ENVIADO_TECNICO, 'Se agenda visita en terreno.');
+
+    return OrdenTrabajo::create(array_merge([
+        'soporte_id' => $soporte->id,
+        'tecnico_id' => $tecnico->id,
+        'tipo' => 'revision',
+        'estado' => OrdenTrabajo::ESTADO_PROGRAMADA,
+        'fecha_programada' => today(),
+        'franja' => 'manana',
+    ], $atributos));
+}
+
+/** @return array<string, mixed> */
+function cierreCompleto(array $extra = []): array
+{
+    return array_merge([
+        'uuid' => (string) Str::uuid(),
+        'estado' => OrdenTrabajo::ESTADO_COMPLETADO,
+        'diagnostico_id' => diagnosticoDePrueba()->id,
+        'observaciones' => 'Se cambió el conector de la acometida y quedó en -18 dBm.',
+    ], $extra);
 }
