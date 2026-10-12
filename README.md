@@ -417,6 +417,21 @@ Con `DEMO_MODE=true` el login publica una cuenta por rol (ninguna de administrad
 clave, y esas cuentas no se pueden borrar ni cambiarles el correo, el nombre o la contraseña.
 La lista está en `config/demo.php`.
 
+#### Reinicio nocturno
+
+En modo demo, `demo:reiniciar` corre todas las noches a las 03:00 (hora de Colombia) desde el
+programador de tareas: borra las fotos y firmas subidas, hace `migrate:fresh --seed`, vuelve a
+importar el histórico y siembra sus contratos. El login lo avisa. Fuera del modo demo el comando
+se niega a correr, porque borra la base entera.
+
+```bash
+php artisan demo:reiniciar                  # completo, con el histórico
+php artisan demo:reiniciar --sin-historico  # solo la siembra base, en segundos
+```
+
+Las sesiones, la cola y la caché viven en la base, así que a esa hora todos los visitantes
+salen de su sesión.
+
 ### Configuración del SLA
 
 Todo lo ajustable vive en `config/sla.php`: jornada laboral, tiempos por criticidad,

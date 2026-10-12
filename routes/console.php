@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\ModoDemo;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -34,3 +35,11 @@ Schedule::command('soportes:alertar-sla')
     ->between('7:00', '18:00')
     ->withoutOverlapping()
     ->runInBackground();
+
+// Demo pública: todo vuelve a su estado de fábrica cada noche. El login
+// avisa la hora. Fuera del modo demo ni se programa (y el comando se niega).
+Schedule::command('demo:reiniciar')
+    ->dailyAt(config('demo.reinicio.hora'))
+    ->timezone(config('demo.reinicio.zona'))
+    ->when(fn () => ModoDemo::activo())
+    ->withoutOverlapping(60);

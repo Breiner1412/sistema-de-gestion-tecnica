@@ -29,6 +29,7 @@ new #[Layout('layouts.guest')] class extends Component
         return [
             'cuentasDemo' => ModoDemo::cuentasPublicas(),
             'claveDemo' => config('demo.password'),
+            'horaReinicio' => config('demo.reinicio.hora'),
         ];
     }
 }; ?>
@@ -54,6 +55,11 @@ new #[Layout('layouts.guest')] class extends Component
                     </li>
                 @endforeach
             </ul>
+
+            <p class="mt-3 text-blue-800">
+                Los datos se reinician todas las noches a las {{ $horaReinicio }} (hora de Colombia):
+                lo que haga aquí no dura más de un día, y a esa hora se cierran todas las sesiones.
+            </p>
         </div>
     @endif
 

@@ -22,6 +22,17 @@ return [
     | Cuentas que el login muestra en modo demo, una por rol. Ninguna es de
     | administrador: aunque se agregue una aquí, ModoDemo la descarta.
     */
+    /*
+    | Reinicio nocturno (demo:reiniciar). La hora va con su zona explícita
+    | para no depender de la zona de la aplicación ni de la del contenedor.
+    */
+    'reinicio' => [
+        'hora' => '03:00',
+        'zona' => 'America/Bogota',
+        'discos' => ['public', 'local'],
+        'carpetas' => ['firmas', 'evidencias'],
+    ],
+
     'cuentas_publicas' => [
         'gerencia@sgt.local',
         'andres.arango@sgt.local',
