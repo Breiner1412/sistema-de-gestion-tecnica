@@ -338,19 +338,25 @@ class Soporte extends Model
      */
     public function cambiarEstado(string $nuevoEstado, ?string $motivo = null, ?int $usuarioId = null): void
     {
-        $anterior = $this->estado;
-
-        if ($anterior === $nuevoEstado) {
-            return;
-        }
-
-        if (!$this->puedeTransicionarA($nuevoEstado)) {
-            throw TransicionInvalidaException::para($anterior, $nuevoEstado);
-        }
-
         $usuarioId ??= auth()->id();
 
-        DB::transaction(function () use ($nuevoEstado, $anterior, $motivo, $usuarioId) {
+        DB::transaction(function () use ($nuevoEstado, $motivo, $usuarioId) {
+            // Dos personas (o una persona y el reintento automático) pueden
+            // mover el mismo caso a la vez. Se relee la fila bloqueada y la
+            // transición se valida contra lo que hay ahora, no contra lo que
+            // había cuando se abrió la pantalla.
+            $this->releerBloqueado();
+
+            $anterior = $this->estado;
+
+            if ($anterior === $nuevoEstado) {
+                return;
+            }
+
+            if (!$this->puedeTransicionarA($nuevoEstado)) {
+                throw TransicionInvalidaException::para($anterior, $nuevoEstado);
+            }
+
             $cambios = ['estado' => $nuevoEstado];
 
             if ($nuevoEstado === self::ESTADO_CANCELADO) {
@@ -387,6 +393,29 @@ class Soporte extends Model
 
             $this->registrarEnHistorial($anterior, $nuevoEstado, $motivo, $usuarioId);
         });
+    }
+
+    /**
+     * Trae la fila con lockForUpdate (debe llamarse dentro de una transacción)
+     * y conserva encima lo que este modelo tenga sin guardar.
+     */
+    private function releerBloqueado(): void
+    {
+        if (! $this->exists) {
+            return;
+        }
+
+        $fila = static::withTrashed()->whereKey($this->getKey())->lockForUpdate()->first();
+
+        if (! $fila) {
+            return;
+        }
+
+        $sinGuardar = $this->getDirty();
+
+        // getDirty() devuelve valores en bruto: se reponen tal cual, sin casts.
+        $this->setRawAttributes($fila->getAttributes(), true);
+        $this->attributes = array_merge($this->attributes, $sinGuardar);
     }
 
     /**
