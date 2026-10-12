@@ -163,3 +163,40 @@ it('no hace nada si las alertas están desactivadas', function () {
 
     Notification::assertNothingSent();
 });
+
+it('si el correo no sale tras los reintentos, el caso vuelve a quedar por avisar', function () {
+    $tecnico = usuarioCon(User::ROL_TECNICO_SOPORTE, 'Andrés Loaiza');
+    $caso = casoConVencimiento(now()->addMinutes(10), $tecnico);
+
+    $this->artisan('soportes:alertar-sla')->assertSuccessful();
+    expect($caso->refresh()->alerta_sla_nivel)->toBe('riesgo');
+
+    // El trabajo de la cola agota sus intentos (SMTP caído).
+    $notificacion = new CasosEnRiesgoDeSla(collect(), collect([$caso]));
+    $notificacion->failed(new RuntimeException('SMTP caído'));
+
+    expect($caso->refresh()->alerta_sla_nivel)->toBeNull();
+
+    $this->artisan('soportes:alertar-sla')->assertSuccessful();
+
+    Notification::assertSentToTimes($tecnico, CasosEnRiesgoDeSla::class, 2);
+    expect($caso->refresh()->alerta_sla_nivel)->toBe('riesgo');
+});
+
+it('desmarcar un correo fallido no pisa un aviso más nuevo del mismo caso', function () {
+    $caso = casoConVencimiento(now()->subMinutes(10));
+    $caso->forceFill(['alerta_sla_nivel' => 'vencido'])->saveQuietly();
+
+    // Falla un correo viejo que había avisado el riesgo.
+    (new CasosEnRiesgoDeSla(collect(), collect([$caso])))->failed(new RuntimeException('x'));
+
+    expect($caso->refresh()->alerta_sla_nivel)->toBe('vencido');
+});
+
+it('la notificación reintenta con espera antes de rendirse', function () {
+    $notificacion = new CasosEnRiesgoDeSla(collect(), collect());
+
+    expect($notificacion->tries)->toBe(3)
+        ->and($notificacion->backoff)->toBe([60, 300])
+        ->and($notificacion)->toBeInstanceOf(\Illuminate\Contracts\Queue\ShouldQueue::class);
+});

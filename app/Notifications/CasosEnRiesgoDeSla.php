@@ -8,6 +8,8 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Un solo correo por persona con todo lo que se le está venciendo.
@@ -21,6 +23,15 @@ class CasosEnRiesgoDeSla extends Notification implements ShouldQueue
 {
     use Queueable;
 
+    /** Intentos ante un SMTP caído antes de rendirse, y la espera entre ellos. */
+    public int $tries = 3;
+
+    /** @var array<int, int> segundos */
+    public array $backoff = [60, 300];
+
+    /** Si un caso se borró antes de salir el correo, no hay nada que avisar. */
+    public bool $deleteWhenMissingModels = true;
+
     /**
      * @param  Collection<int, Soporte>  $vencidos
      * @param  Collection<int, Soporte>  $enRiesgo
@@ -29,6 +40,27 @@ class CasosEnRiesgoDeSla extends Notification implements ShouldQueue
         public readonly Collection $vencidos,
         public readonly Collection $enRiesgo,
     ) {}
+
+    /**
+     * El correo no salió tras todos los intentos. AlertarSla ya había marcado
+     * los casos como avisados al encolarlo; se desmarca lo que este correo
+     * marcó para que el siguiente turno vuelva a intentarlo, en vez de dar
+     * por avisado algo que nunca llegó.
+     */
+    public function failed(Throwable $error): void
+    {
+        foreach (['vencido' => $this->vencidos, 'riesgo' => $this->enRiesgo] as $nivel => $casos) {
+            Soporte::whereIn('id', $casos->pluck('id'))
+                ->where('alerta_sla_nivel', $nivel)
+                ->update(['alerta_sla_nivel' => null, 'alerta_sla_at' => null]);
+        }
+
+        Log::warning('Alerta de SLA sin entregar; se reintentará en el próximo turno.', [
+            'vencidos' => $this->vencidos->pluck('id')->all(),
+            'en_riesgo' => $this->enRiesgo->pluck('id')->all(),
+            'error' => $error->getMessage(),
+        ]);
+    }
 
     /** @return array<int, string> */
     public function via(object $notifiable): array

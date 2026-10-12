@@ -51,8 +51,10 @@ class AlertarSla extends Command
 
         $avisados = $this->enviar($buzones, $simulacion);
 
-        // Solo se marca lo que efectivamente salió: si un caso no tenía a quién
-        // avisarle, se deja sin marcar para que el próximo turno lo reintente.
+        // Solo se marca lo que se encoló para todos sus destinatarios. Si un
+        // caso no tenía a quién avisarle, o algún correo no se pudo encolar,
+        // queda sin marcar y el próximo turno lo reintenta. Si el correo se
+        // encola pero no sale, CasosEnRiesgoDeSla::failed() lo desmarca.
         $enviados = $pendientes->filter(fn($fila) => $avisados->contains($fila['caso']->id));
 
         if (! $simulacion) {
@@ -181,11 +183,12 @@ class AlertarSla extends Command
 
     /**
      * @param  Collection<int, array{persona: User, vencidos: Collection, riesgo: Collection}>  $buzones
-     * @return Collection<int, int>  Ids de los casos que salieron en algún correo.
+     * @return Collection<int, int>  Ids de los casos cuyos correos se encolaron todos.
      */
     private function enviar(Collection $buzones, bool $simulacion): Collection
     {
         $avisados = collect();
+        $fallidos = collect();
 
         foreach ($buzones as $buzon) {
             $this->line(sprintf(
@@ -195,18 +198,28 @@ class AlertarSla extends Command
                 $buzon['riesgo']->count(),
             ));
 
+            $ids = $buzon['vencidos']->pluck('id')->merge($buzon['riesgo']->pluck('id'));
+
             if (! $simulacion) {
-                $buzon['persona']->notify(new CasosEnRiesgoDeSla(
-                    $buzon['vencidos'],
-                    $buzon['riesgo'],
-                ));
+                try {
+                    $buzon['persona']->notify(new CasosEnRiesgoDeSla(
+                        $buzon['vencidos'],
+                        $buzon['riesgo'],
+                    ));
+                } catch (\Throwable $error) {
+                    // Un buzón que falla no frena a los demás.
+                    report($error);
+                    $this->error("  No se pudo encolar el aviso para {$buzon['persona']->email}.");
+                    $fallidos = $fallidos->merge($ids);
+
+                    continue;
+                }
             }
 
-            $avisados = $avisados->merge($buzon['vencidos']->pluck('id'))
-                ->merge($buzon['riesgo']->pluck('id'));
+            $avisados = $avisados->merge($ids);
         }
 
-        return $avisados->unique()->values();
+        return $avisados->unique()->diff($fallidos)->values();
     }
 
     /** @param Collection<int, array{caso: Soporte, nivel: string}> $enviados */
