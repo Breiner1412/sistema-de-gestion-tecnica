@@ -163,6 +163,27 @@ async function intentar(pendiente) {
 
 let drenando = false
 
+/**
+ * Un solo envío a la vez en todo el navegador.
+ *
+ * `drenando` solo cuida esta pestaña: con dos pestañas abiertas, o con el
+ * reintento de cada minuto coincidiendo con el envío del botón, el mismo
+ * cierre salía dos veces. El servidor lo reconoce (devuelve "repetido"),
+ * pero el segundo envío sube otra vez las fotos por datos móviles. El
+ * candado de Web Locks se comparte entre pestañas del mismo origen.
+ *
+ * Con `esperar: false`, si otra pestaña ya está enviando, esta no hace nada.
+ */
+function conCandado({ esperar }, accion) {
+    if (!navigator.locks?.request) {
+        return accion()
+    }
+
+    return navigator.locks.request('sgt-campo-cola', { ifAvailable: !esperar }, (candado) =>
+        candado ? accion() : undefined,
+    )
+}
+
 /** Vacía la cola. Se detiene al primer pendiente que haya que reintentar. */
 async function drenar() {
     if (drenando || !navigator.onLine) {
@@ -170,34 +191,39 @@ async function drenar() {
     }
 
     drenando = true
-    let sesionCaducada = false
 
     try {
-        for (const pendiente of await cola.porEnviar()) {
-            const { decision, motivo } = await intentar(pendiente)
-
-            if (decision === 'enviado') {
-                await cola.borrar(pendiente.uuid)
-                continue
-            }
-
-            // Un rechazo no frena a los demás: se aparta y se sigue.
-            if (decision === 'rechazado') {
-                await marcarRechazado({ ...pendiente, error: motivo })
-                await anunciar({ error: motivo })
-                continue
-            }
-
-            sesionCaducada = decision === 'sesion'
-
-            break // el resto espera: no tiene sentido insistir con la red caída
-        }
-
-        // Tras volver a entrar, una vuelta limpia quita el aviso de sesión.
-        await anunciar({ sesionCaducada })
+        await conCandado({ esperar: false }, vaciar)
     } finally {
         drenando = false
     }
+}
+
+async function vaciar() {
+    let sesionCaducada = false
+
+    for (const pendiente of await cola.porEnviar()) {
+        const { decision, motivo } = await intentar(pendiente)
+
+        if (decision === 'enviado') {
+            await cola.borrar(pendiente.uuid)
+            continue
+        }
+
+        // Un rechazo no frena a los demás: se aparta y se sigue.
+        if (decision === 'rechazado') {
+            await marcarRechazado({ ...pendiente, error: motivo })
+            await anunciar({ error: motivo })
+            continue
+        }
+
+        sesionCaducada = decision === 'sesion'
+
+        break // el resto espera: no tiene sentido insistir con la red caída
+    }
+
+    // Tras volver a entrar, una vuelta limpia quita el aviso de sesión.
+    await anunciar({ sesionCaducada })
 }
 
 /**
@@ -213,15 +239,25 @@ async function encolar(url, carga) {
     await cola.guardar(pendiente)
     await anunciar()
 
-    const { decision, motivo } = await intentar(pendiente)
+    // Se espera el candado: si otra pestaña estaba vaciando la cola, puede
+    // que ya lo haya enviado. En ese caso no hay nada más que hacer.
+    const { decision, motivo } = await conCandado({ esperar: true }, async () => {
+        if (!(await cola.obtener(pendiente.uuid))) {
+            return { decision: 'enviado', motivo: null }
+        }
 
-    if (decision === 'enviado') {
-        await cola.borrar(pendiente.uuid)
-    }
+        const resultado = await intentar(pendiente)
 
-    if (decision === 'rechazado') {
-        await marcarRechazado({ ...pendiente, error: motivo })
-    }
+        if (resultado.decision === 'enviado') {
+            await cola.borrar(pendiente.uuid)
+        }
+
+        if (resultado.decision === 'rechazado') {
+            await marcarRechazado({ ...pendiente, error: resultado.motivo })
+        }
+
+        return resultado
+    })
 
     await anunciar({ error: motivo, sesionCaducada: decision === 'sesion' })
 
