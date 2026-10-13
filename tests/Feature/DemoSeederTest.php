@@ -43,3 +43,12 @@ it('en producción solo siembra la demo si el modo demo está activo', function 
     'demo pública' => [true, true],
     'producción real' => [false, false],
 ]);
+
+it('cada técnico de campo tiene visitas para hoy y para mañana', function () {
+    foreach (\App\Models\Tecnico::all() as $tecnico) {
+        $abiertas = \App\Models\OrdenTrabajo::where('tecnico_id', $tecnico->id)->abiertas();
+
+        expect((clone $abiertas)->delDia(today())->count())->toBeGreaterThan(0, "{$tecnico->nombre} sin visitas hoy")
+            ->and((clone $abiertas)->delDia(today()->addDay())->count())->toBeGreaterThan(0, "{$tecnico->nombre} sin visitas mañana");
+    }
+});

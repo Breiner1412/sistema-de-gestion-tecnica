@@ -56,6 +56,63 @@ class DemoSeeder extends Seeder
         $clientes = $this->clientes();
         $this->inventario();
         $this->casos($clientes);
+        $this->visitasDeCampo($clientes);
+    }
+
+    /**
+     * La pantalla de campo es de lo que más se luce en la demo, y con el azar
+     * de casos() podía quedar vacía: bastaba que ningún caso abierto cayera en
+     * la rama de la visita. Cada técnico de campo arranca con una visita para
+     * hoy y otra para mañana. Como la demo se reinicia cada noche, "hoy"
+     * siempre es hoy.
+     */
+    private function visitasDeCampo($clientes): void
+    {
+        $nivel2 = User::where('rol', User::ROL_TECNICO_SOPORTE)->orderBy('id')->value('id');
+        $asesor = User::where('rol', User::ROL_CALL_CENTER)->orderBy('id')->value('id');
+
+        if (! $nivel2 || ! $asesor) {
+            return;
+        }
+
+        foreach (Tecnico::orderBy('id')->get() as $i => $tecnico) {
+            foreach ([today(), today()->addDay()] as $j => $dia) {
+                $yaTiene = OrdenTrabajo::where('tecnico_id', $tecnico->id)->abiertas()->delDia($dia)->exists();
+
+                if ($yaTiene) {
+                    continue;
+                }
+
+                $soporte = new Soporte([
+                    'cliente_id' => $clientes[($i * 2 + $j) % $clientes->count()]->id,
+                    'tipo_solicitud' => Soporte::TIPO_SIN_INTERNET,
+                    'canal_ingreso' => Soporte::CANAL_CALL_CENTER,
+                    'servicio_afectado' => 'internet',
+                    'usuario_registra_id' => $asesor,
+                    'descripcion' => $this->descripcion(Soporte::TIPO_SIN_INTERNET, null),
+                    'estado' => Soporte::ESTADO_PENDIENTE,
+                ]);
+                $soporte->created_at = $this->momentoHabilAleatorio(1);
+                $soporte->save();
+
+                $soporte->asignarTecnicoSoporte($nivel2, $nivel2);
+
+                OrdenTrabajo::create([
+                    'soporte_id' => $soporte->id,
+                    'tecnico_id' => $tecnico->id,
+                    'tipo' => 'revision',
+                    'estado' => OrdenTrabajo::ESTADO_PROGRAMADA,
+                    'fecha_programada' => $dia->toDateString(),
+                    'franja' => $j === 0 ? 'manana' : 'tarde',
+                ]);
+
+                $soporte->cambiarEstado(
+                    Soporte::ESTADO_ENVIADO_TECNICO,
+                    "Visita programada para el {$dia->format('d/m/Y')}.",
+                    $nivel2,
+                );
+            }
+        }
     }
 
     /* ---------------------------------------------------------------
