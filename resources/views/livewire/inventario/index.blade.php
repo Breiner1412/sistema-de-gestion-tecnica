@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
@@ -21,7 +22,10 @@ new #[Layout('layouts.app')] class extends Component {
 
     public string $panel = '';
 
+    // Los ids los ponen editarMaterial() y moverStock(): el navegador no los
+    // puede cambiar por los de otro material entre abrir y guardar el panel.
     // Material
+    #[Locked]
     public ?int $material_id = null;
     public string $nombre = '';
     public string $tipo = 'cable';
@@ -29,6 +33,7 @@ new #[Layout('layouts.app')] class extends Component {
     public string $precio_unitario = '';
 
     // Movimiento
+    #[Locked]
     public ?int $movimiento_material_id = null;
     public string $movimiento_tipo = 'entrada';
     public string $movimiento_cantidad = '';
@@ -112,7 +117,7 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function moverStock(int $id): void
     {
-        $this->movimiento_material_id = $id;
+        $this->movimiento_material_id = Inventario::findOrFail($id)->id;
         $this->movimiento_tipo = 'entrada';
         $this->movimiento_cantidad = '';
         $this->panel = 'movimiento';
