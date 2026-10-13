@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 beforeEach(function () {
-    Storage::fake('public');
+    Storage::fake('local');
 });
 
 it('cierra la visita y el caso en el mismo envío', function () {
@@ -48,7 +48,7 @@ it('guarda la foto y la firma en disco, no en la tabla', function () {
     $visita->refresh();
 
     expect($visita->firma_path)->toStartWith('firmas/')
-        ->and(Storage::disk('public')->exists($visita->firma_path))->toBeTrue();
+        ->and(Storage::disk('local')->exists($visita->firma_path))->toBeTrue();
 
     $evidencias = Evidencia::where('orden_id', $visita->id)->get();
 
@@ -56,7 +56,7 @@ it('guarda la foto y la firma en disco, no en la tabla', function () {
         ->and($evidencias->first()->descripcion)->toBe('Acometida');
 
     foreach ($evidencias as $evidencia) {
-        expect(Storage::disk('public')->exists($evidencia->archivo_url))->toBeTrue();
+        expect(Storage::disk('local')->exists($evidencia->archivo_url))->toBeTrue();
     }
 });
 

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CierreVisitaController;
+use App\Http\Controllers\EvidenciaController;
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
 
@@ -37,6 +38,10 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware('role:admin,gerente,call_center,tecnico_soporte,ingeniero_redes,tecnico_campo')->group(function () {
         Volt::route('/ordenes', 'ordenes.index')->name('ordenes.index');
         Volt::route('/ordenes/{orden}', 'ordenes.show')->name('ordenes.show');
+
+        // Fotos y firma: archivos privados, con la misma política que la visita.
+        Route::get('/ordenes/{orden}/firma', [EvidenciaController::class, 'firma'])->name('ordenes.firma');
+        Route::get('/evidencias/{evidencia}', [EvidenciaController::class, 'foto'])->name('evidencias.ver');
     });
 
     // Pantalla de campo. Va aparte de /ordenes porque el técnico la usa con una

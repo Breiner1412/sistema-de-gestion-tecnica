@@ -5,7 +5,6 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Facades\Storage;
 
 class OrdenTrabajo extends Model
 {
@@ -108,7 +107,7 @@ class OrdenTrabajo extends Model
 
     public function urlFirma(): ?string
     {
-        return $this->firma_path ? Storage::disk('public')->url($this->firma_path) : null;
+        return $this->firma_path ? route('ordenes.firma', $this) : null;
     }
 
     public function etiquetaEstado(): string

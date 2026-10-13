@@ -30,6 +30,12 @@ use Illuminate\Validation\ValidationException;
  */
 class CierreDeVisita
 {
+    /** Lo único que se acepta como foto o firma. */
+    private const TIPOS_IMAGEN = ['image/jpeg', 'image/png', 'image/webp'];
+
+    /** 25 megapíxeles: de sobra para una foto de celular reducida. */
+    private const MAX_PIXELES = 25_000_000;
+
     /** @var array<int, string> */
     private array $avisos = [];
 
@@ -105,7 +111,7 @@ class CierreDeVisita
                 return false;
             });
         } catch (UniqueConstraintViolationException) {
-            Storage::disk('public')->delete($archivos);
+            Storage::disk(Evidencia::DISCO)->delete($archivos);
 
             // El uuid lo pone el teléfono: si ya lo usó otra visita, el error
             // es del envío, no del servidor.
@@ -114,14 +120,14 @@ class CierreDeVisita
             ]);
         } catch (\Throwable $e) {
             // Sin esto, cada reintento fallido deja fotos huérfanas en disco.
-            Storage::disk('public')->delete($archivos);
+            Storage::disk(Evidencia::DISCO)->delete($archivos);
 
             throw $e;
         }
 
         if ($repetido) {
             // Las fotos de este envío sobran: ya las guardó el que llegó primero.
-            Storage::disk('public')->delete($archivos);
+            Storage::disk(Evidencia::DISCO)->delete($archivos);
         }
 
         return $this->respuesta(repetido: $repetido);
@@ -262,7 +268,7 @@ class CierreDeVisita
         }
 
         $ruta = 'firmas/'.Str::uuid().'.png';
-        Storage::disk('public')->put($ruta, $binario);
+        Storage::disk(Evidencia::DISCO)->put($ruta, $this->imagenLimpia($binario, 'png', 'firma'));
 
         return $ruta;
     }
@@ -283,7 +289,7 @@ class CierreDeVisita
             }
 
             $ruta = 'evidencias/'.$this->orden->id.'/'.Str::uuid().'.jpg';
-            Storage::disk('public')->put($ruta, $binario);
+            Storage::disk(Evidencia::DISCO)->put($ruta, $this->imagenLimpia($binario, 'jpg', 'fotos'));
 
             $guardadas[] = [
                 'ruta' => $ruta,
@@ -307,6 +313,52 @@ class CierreDeVisita
         $binario = base64_decode($base64, true);
 
         return $binario !== false && $binario !== '' ? $binario : null;
+    }
+
+    /**
+     * Solo se guardan imágenes de verdad, y se guardan redibujadas.
+     *
+     * Antes se aceptaba cualquier base64 con extensión .jpg. Ahora se exige
+     * que sea JPEG, PNG o WebP y se vuelve a codificar con GD: lo que se
+     * guarda son los píxeles y nada más. Se cae cualquier contenido escondido
+     * en el archivo y también los metadatos EXIF, que en una foto de celular
+     * traen las coordenadas exactas de la casa del cliente.
+     */
+    private function imagenLimpia(string $binario, string $formato, string $campo): string
+    {
+        $info = @getimagesizefromstring($binario);
+        $rechazo = ValidationException::withMessages([$campo => 'El archivo no es una imagen válida.']);
+
+        if ($info === false || ! in_array($info['mime'], self::TIPOS_IMAGEN, true)) {
+            throw $rechazo;
+        }
+
+        // Una imagen pequeña en bytes puede declarar dimensiones enormes y
+        // agotar la memoria al abrirla.
+        if ($info[0] * $info[1] > self::MAX_PIXELES) {
+            throw ValidationException::withMessages([$campo => 'La imagen es demasiado grande.']);
+        }
+
+        if (! function_exists('imagecreatefromstring')) {
+            return $binario;
+        }
+
+        $imagen = @imagecreatefromstring($binario);
+
+        if ($imagen === false) {
+            throw $rechazo;
+        }
+
+        ob_start();
+
+        if ($formato === 'png') {
+            imagesavealpha($imagen, true);
+            imagepng($imagen);
+        } else {
+            imagejpeg($imagen, null, 85);
+        }
+
+        return (string) ob_get_clean();
     }
 
     /* ---------------------------------------------------------------

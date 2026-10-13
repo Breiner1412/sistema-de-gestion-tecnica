@@ -14,7 +14,7 @@ use Illuminate\Validation\ValidationException;
  * esa foto vieja de la orden: el segundo llega con el modelo desactualizado,
  * que es exactamente lo que ve una petición concurrente.
  */
-beforeEach(fn () => Storage::fake('public'));
+beforeEach(fn () => Storage::fake('local'));
 
 function materialConStock(int $cantidad): Inventario
 {
@@ -53,7 +53,7 @@ it('dos cierres distintos a la vez: el segundo se rechaza y no descuenta nada', 
         ->toThrow(ValidationException::class);
 
     expect($material->refresh()->cantidad_total)->toBe(7)
-        ->and(Storage::disk('public')->allFiles())->toBe([]);
+        ->and(Storage::disk('local')->allFiles())->toBe([]);
 });
 
 it('un uuid que ya usó otra visita se rechaza con un error de validación, no un 500', function () {
