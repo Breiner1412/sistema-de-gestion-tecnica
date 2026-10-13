@@ -2,7 +2,6 @@
 
 use App\Models\Inventario;
 use App\Models\MovimientoInventario;
-use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
@@ -36,7 +35,7 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function mount(): void
     {
-        abort_unless(auth()->user()->tieneRol(User::ROL_ADMIN, User::ROL_GERENTE), 403);
+        $this->authorize('viewAny', Inventario::class);
     }
 
     public function updated($propiedad): void
@@ -67,6 +66,7 @@ new #[Layout('layouts.app')] class extends Component {
     public function editarMaterial(int $id): void
     {
         $material = Inventario::findOrFail($id);
+        $this->authorize('update', $material);
 
         $this->material_id = $material->id;
         $this->nombre = $material->nombre;
@@ -78,6 +78,10 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function guardarMaterial(): void
     {
+        $this->material_id
+            ? $this->authorize('update', Inventario::findOrFail($this->material_id))
+            : $this->authorize('create', Inventario::class);
+
         $datos = $this->validate([
             'nombre' => ['required', 'string', 'max:120', Rule::unique('inventario', 'nombre')->ignore($this->material_id)],
             'tipo' => ['required', 'string', 'max:40'],
@@ -123,6 +127,7 @@ new #[Layout('layouts.app')] class extends Component {
         ], [], ['movimiento_cantidad' => 'cantidad']);
 
         $material = Inventario::findOrFail($this->movimiento_material_id);
+        $this->authorize('update', $material);
         $cantidad = (int) $this->movimiento_cantidad;
 
         $aplicado = DB::transaction(function () use ($material, $cantidad) {

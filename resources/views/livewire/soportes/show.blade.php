@@ -34,6 +34,8 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function mount(Soporte $soporte): void
     {
+        $this->authorize('view', $soporte);
+
         $this->soporte = $soporte;
         $this->tecnico_soporte_id = $soporte->tecnico_soporte_id ?? '';
         $this->diagnostico_id = $soporte->diagnostico_id ?? '';
@@ -90,7 +92,25 @@ new #[Layout('layouts.app')] class extends Component {
     #[Computed]
     public function puedeReasignar(): bool
     {
-        return auth()->user()->esAdmin() || !$this->ordenAbierta;
+        return auth()->user()->can('asignar', $this->soporte);
+    }
+
+    #[Computed]
+    public function puedeTrabajar(): bool
+    {
+        return auth()->user()->can('trabajar', $this->soporte);
+    }
+
+    #[Computed]
+    public function puedeCancelar(): bool
+    {
+        return auth()->user()->can('cancelar', $this->soporte);
+    }
+
+    #[Computed]
+    public function puedeElevar(): bool
+    {
+        return auth()->user()->can('elevarCriticidad', $this->soporte);
     }
 
     /** Cuántas veces había reportado el abonado antes de este caso. */
@@ -109,7 +129,7 @@ new #[Layout('layouts.app')] class extends Component {
     #[Computed]
     public function esResponsableN3(): bool
     {
-        return auth()->id() === $this->soporte->escalado_a_id || auth()->user()->esAdmin();
+        return auth()->user()->can('responderComoRedes', $this->soporte);
     }
 
     private function ok(string $mensaje): void
@@ -125,10 +145,12 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function asignar(): void
     {
-        if (!$this->puedeReasignar) {
+        if ($this->ordenAbierta && !auth()->user()->esAdmin()) {
             session()->flash('error', 'El caso ya tiene una visita en curso. Solo un administrador puede reasignarlo.');
             return;
         }
+
+        $this->authorize('asignar', $this->soporte);
 
         $this->validate(['tecnico_soporte_id' => 'required|exists:users,id']);
 
@@ -138,6 +160,8 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function resolver(): void
     {
+        $this->authorize('trabajar', $this->soporte);
+
         if ($this->ordenAbierta) {
             session()->flash('error', 'Hay una visita pendiente. El caso no se puede cerrar hasta que el técnico la ejecute.');
             return;
@@ -159,21 +183,29 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function sinContacto(): void
     {
+        $this->authorize('trabajar', $this->soporte);
+
         $this->intentar(fn() => $this->soporte->marcarSinContacto(), 'Intento de contacto registrado.');
     }
 
     public function seguimiento(): void
     {
+        $this->authorize('trabajar', $this->soporte);
+
         $this->intentar(fn() => $this->soporte->cambiarEstado(Soporte::ESTADO_SEGUIMIENTO), 'Caso puesto en seguimiento.');
     }
 
     public function retomar(): void
     {
+        $this->authorize('trabajar', $this->soporte);
+
         $this->intentar(fn() => $this->soporte->cambiarEstado(Soporte::ESTADO_EN_PROCESO), 'Caso retomado por el nivel 2.');
     }
 
     public function escalar(): void
     {
+        $this->authorize('trabajar', $this->soporte);
+
         $this->validate([
             'ingeniero_redes_id' => 'required|exists:users,id',
             'motivo_escalamiento' => 'required|min:10',
@@ -190,6 +222,8 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function devolverDeRedes(): void
     {
+        $this->authorize('responderComoRedes', $this->soporte);
+
         $this->validate(['respuesta_n3' => 'required|min:10']);
 
         $this->intentar(fn() => $this->soporte->devolverDeNivel3($this->respuesta_n3), 'Caso devuelto al nivel 2.');
@@ -197,6 +231,8 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function programarVisita(): void
     {
+        $this->authorize('trabajar', $this->soporte);
+
         if ($orden = $this->ordenAbierta) {
             $this->redirect(route('ordenes.show', $orden), navigate: true);
             return;
@@ -227,6 +263,8 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function cancelar(): void
     {
+        $this->authorize('cancelar', $this->soporte);
+
         $this->validate(['motivo_cancelacion' => 'required|min:5'], [
             'motivo_cancelacion.required' => 'Debes escribir un motivo para cancelar el caso.',
         ]);
@@ -239,6 +277,8 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function elevarCriticidad(): void
     {
+        $this->authorize('elevarCriticidad', $this->soporte);
+
         $this->validate(['motivo_criticidad' => 'required|min:10']);
 
         $this->soporte->elevarCriticidad($this->motivo_criticidad);
@@ -478,7 +518,9 @@ new #[Layout('layouts.app')] class extends Component {
                 @error('tecnico_soporte_id') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
             @else
                 <p class="text-slate-700">{{ $soporte->tecnicoSoporte->name ?? 'Sin asignar' }}</p>
-                <p class="text-xs text-slate-500 mt-1">Hay una visita en curso. Solo un administrador puede reasignar.</p>
+                @if ($this->ordenAbierta)
+                    <p class="text-xs text-slate-500 mt-1">Hay una visita en curso. Solo un administrador puede reasignar.</p>
+                @endif
             @endif
         </div>
     @endunless
@@ -501,7 +543,7 @@ new #[Layout('layouts.app')] class extends Component {
                     @endif
                 @endif
 
-                @if ($soporte->puedeTransicionarA('solucionado') && !$this->ordenAbierta)
+                @if ($this->puedeTrabajar && $soporte->puedeTransicionarA('solucionado') && !$this->ordenAbierta)
                     <button wire:click="$set('panel', 'cerrar')" class="bg-green-600 text-white px-4 py-2 rounded">
                         Resolver
                     </button>
@@ -515,19 +557,19 @@ new #[Layout('layouts.app')] class extends Component {
                             ({{ $this->ordenAbierta->fecha_programada->format('d/m') }})
                         @endif
                     </a>
-                @elseif ($soporte->puedeTransicionarA('enviado_tecnico'))
+                @elseif ($this->puedeTrabajar && $soporte->puedeTransicionarA('enviado_tecnico'))
                     <button wire:click="$set('panel', 'visita')" class="bg-indigo-600 text-white px-4 py-2 rounded">
                         Programar visita
                     </button>
                 @endif
 
-                @if ($soporte->puedeTransicionarA('escalado_n3'))
+                @if ($this->puedeTrabajar && $soporte->puedeTransicionarA('escalado_n3'))
                     <button wire:click="$set('panel', 'escalar')" class="bg-slate-800 text-white px-4 py-2 rounded">
                         Escalar a redes
                     </button>
                 @endif
 
-                @if ($soporte->puedeTransicionarA('sin_contacto'))
+                @if ($this->puedeTrabajar && $soporte->puedeTransicionarA('sin_contacto'))
                     <button wire:click="sinContacto"
                         wire:confirm="¿Registrar un intento de contacto sin respuesta?"
                         class="bg-orange-500 text-white px-4 py-2 rounded">
@@ -535,25 +577,25 @@ new #[Layout('layouts.app')] class extends Component {
                     </button>
                 @endif
 
-                @if ($soporte->puedeTransicionarA('seguimiento'))
+                @if ($this->puedeTrabajar && $soporte->puedeTransicionarA('seguimiento'))
                     <button wire:click="seguimiento" class="bg-cyan-600 text-white px-4 py-2 rounded">
                         Seguimiento
                     </button>
                 @endif
 
-                @if ($soporte->estado === 'sin_contacto')
+                @if ($this->puedeTrabajar && $soporte->estado === 'sin_contacto')
                     <button wire:click="retomar" class="bg-blue-600 text-white px-4 py-2 rounded">
                         Retomar
                     </button>
                 @endif
 
-                @unless ($soporte->esInmediato())
+                @if ($this->puedeElevar && !$soporte->esInmediato())
                     <button wire:click="$set('panel', 'criticidad')" class="border border-red-300 text-red-700 px-4 py-2 rounded">
                         Elevar a inmediato
                     </button>
-                @endunless
+                @endif
 
-                @if ($soporte->puedeTransicionarA('cancelado'))
+                @if ($this->puedeCancelar && $soporte->puedeTransicionarA('cancelado'))
                     <button wire:click="$set('panel', 'cancelar')" class="bg-red-600 text-white px-4 py-2 rounded">
                         Cancelar
                     </button>

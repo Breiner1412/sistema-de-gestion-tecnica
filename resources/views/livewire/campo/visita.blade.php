@@ -3,7 +3,6 @@
 use App\Models\Diagnostico;
 use App\Models\Inventario;
 use App\Models\OrdenTrabajo;
-use App\Models\User;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 
@@ -12,12 +11,7 @@ new #[Layout('layouts.campo')] class extends Component {
 
     public function mount(OrdenTrabajo $orden): void
     {
-        $usuario = auth()->user();
-
-        abort_unless(
-            $usuario->tieneRol(...User::ROLES_GESTION) || $usuario->tecnico?->id === $orden->tecnico_id,
-            403,
-        );
+        $this->authorize('update', $orden);
 
         $this->orden = $orden->load(['soporte.cliente', 'soporte.tipoFalla', 'evidencias']);
     }

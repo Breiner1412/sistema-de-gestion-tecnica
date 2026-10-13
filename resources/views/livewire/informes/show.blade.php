@@ -1,7 +1,6 @@
 <?php
 
 use App\Models\InformeMensual;
-use App\Models\User;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
@@ -17,10 +16,7 @@ new #[Layout('layouts.app')] class extends Component {
         $usuario = auth()->user();
 
         // El técnico puede leer el suyo; la gestión puede leer y escribir todos.
-        abort_unless(
-            $usuario->tieneRol(User::ROL_ADMIN, User::ROL_GERENTE) || $usuario->id === $informe->tecnico_id,
-            403
-        );
+        $this->authorize('view', $informe);
 
         $this->informe = $informe->load('tecnico', 'generadoPor');
         $this->observaciones = (string) $informe->observaciones;
@@ -35,8 +31,7 @@ new #[Layout('layouts.app')] class extends Component {
     #[Computed]
     public function puedeEditar(): bool
     {
-        return auth()->user()->tieneRol(User::ROL_ADMIN, User::ROL_GERENTE)
-            && !$this->informe->estaPublicado();
+        return auth()->user()->can('update', $this->informe);
     }
 
     #[Computed]
@@ -47,7 +42,7 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function guardar(): void
     {
-        abort_unless($this->puedeEditar, 403);
+        $this->authorize('update', $this->informe);
 
         $this->validate([
             'observaciones' => ['nullable', 'string', 'max:4000'],
@@ -64,7 +59,7 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function publicar(): void
     {
-        abort_unless($this->puedeEditar, 403);
+        $this->authorize('update', $this->informe);
 
         if (blank($this->observaciones)) {
             $this->addError('observaciones', 'Un informe sin observaciones no le sirve a nadie: escribe la retroalimentación antes de publicar.');

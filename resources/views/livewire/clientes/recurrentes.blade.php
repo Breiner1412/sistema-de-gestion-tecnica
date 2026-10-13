@@ -25,6 +25,8 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function mount(): void
     {
+        $this->authorize('viewAny', Cliente::class);
+
         $this->minimo = (int) config('sla.recurrencia.minimo_en_ventana_larga', 3);
     }
 
@@ -92,6 +94,8 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function exportar()
     {
+        $this->authorize('viewAny', Cliente::class);
+
         $filas = $this->consulta()->get()
             ->map(fn($c) => [
                 $c->codigo_abonado,

@@ -10,6 +10,11 @@ new #[Layout('layouts.campo')] class extends Component {
     #[Url(except: 'hoy')]
     public string $cuando = 'hoy';
 
+    public function mount(): void
+    {
+        $this->authorize('viewAny', OrdenTrabajo::class);
+    }
+
     /**
      * Las visitas del técnico que abrió la pantalla.
      *

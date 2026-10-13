@@ -42,6 +42,8 @@ new #[Layout('layouts.app')] class extends Component {
     /** Permite llegar desde la ficha del cliente con el abonado ya elegido. */
     public function mount(): void
     {
+        $this->authorize('create', Soporte::class);
+
         if ($id = request()->integer('cliente')) {
             if (Cliente::whereKey($id)->exists()) {
                 $this->cliente_id = $id;
@@ -138,6 +140,8 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function guardar()
     {
+        $this->authorize('create', Soporte::class);
+
         $this->validate($this->reglas(), [], [
             'cliente_id' => 'cliente',
             'plan_nuevo_id' => 'plan nuevo',

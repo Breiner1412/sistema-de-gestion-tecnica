@@ -29,6 +29,11 @@ new #[Layout('layouts.app')] class extends Component {
     #[Url(except: '')]
     public string $vista = ''; // '', 'mios', 'abiertos', 'vencidos', 'inmediatos'
 
+    public function mount(): void
+    {
+        $this->authorize('viewAny', Soporte::class);
+    }
+
     public function updated($propiedad): void
     {
         if ($propiedad !== 'page') {
@@ -80,6 +85,8 @@ new #[Layout('layouts.app')] class extends Component {
     /** Descarga los casos filtrados, fila por fila. */
     public function exportar()
     {
+        $this->authorize('exportar', Soporte::class);
+
         return ExportadorCsv::descargar(
             ExportadorCsv::nombre('soportes'),
             ['N° soporte', 'Ingreso', 'Abonado', 'Cliente', 'Tipo', 'Canal', 'Criticidad',

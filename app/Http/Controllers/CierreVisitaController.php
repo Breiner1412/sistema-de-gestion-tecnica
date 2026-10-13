@@ -4,10 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\CerrarVisitaRequest;
 use App\Models\OrdenTrabajo;
-use App\Models\User;
 use App\Services\CierreDeVisita;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 
 /**
  * La puerta por la que entra el celular.
@@ -28,7 +28,7 @@ class CierreVisitaController extends Controller
      */
     public function iniciar(Request $request, OrdenTrabajo $orden): JsonResponse
     {
-        $this->autorizar($request, $orden);
+        Gate::authorize('update', $orden);
 
         $datos = $request->validate([
             'latitud' => ['nullable', 'numeric', 'between:-90,90'],
@@ -72,16 +72,5 @@ class CierreVisitaController extends Controller
                 'etiqueta' => $resultado['orden']->etiquetaEstado(),
             ],
         ]);
-    }
-
-    private function autorizar(Request $request, OrdenTrabajo $orden): void
-    {
-        $usuario = $request->user();
-
-        abort_unless(
-            $usuario->tieneRol(...User::ROLES_GESTION)
-                || $usuario->tecnico?->id === $orden->tecnico_id,
-            403,
-        );
     }
 }

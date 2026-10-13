@@ -23,7 +23,9 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function mount(?User $usuario = null): void
     {
-        abort_unless(auth()->user()->esAdmin(), 403);
+        $usuario?->exists
+            ? $this->authorize('update', $usuario)
+            : $this->authorize('create', User::class);
 
         if ($usuario?->exists) {
             $this->usuario = $usuario;
@@ -41,7 +43,9 @@ new #[Layout('layouts.app')] class extends Component {
     public function guardar()
     {
         // mount() solo corre en la primera carga: cada acción vuelve a preguntar.
-        abort_unless(auth()->user()->esAdmin(), 403);
+        $this->usuario
+            ? $this->authorize('update', $this->usuario)
+            : $this->authorize('create', User::class);
 
         $reglas = [
             'name' => ['required', 'string', 'max:255'],

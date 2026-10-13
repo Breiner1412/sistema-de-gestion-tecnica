@@ -3,7 +3,6 @@
 use App\Models\Cliente;
 use App\Models\Contrato;
 use App\Models\EquipoInstalado;
-use App\Models\User;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
@@ -31,6 +30,8 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function mount(Cliente $cliente): void
     {
+        $this->authorize('view', $cliente);
+
         $this->cliente = $cliente;
         $this->recargar();
     }
@@ -83,7 +84,7 @@ new #[Layout('layouts.app')] class extends Component {
     #[Computed]
     public function puedeEditar(): bool
     {
-        return auth()->user()->tieneRol(User::ROL_ADMIN, User::ROL_GERENTE, User::ROL_CALL_CENTER);
+        return auth()->user()->can('update', $this->cliente);
     }
 
     /* ---------------------------------------------------------------
@@ -117,7 +118,7 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function guardarContrato(): void
     {
-        abort_unless($this->puedeEditar, 403);
+        $this->authorize('update', $this->cliente);
 
         $datos = $this->validate([
             'numero_contrato' => [
@@ -167,7 +168,7 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function guardarEquipo(): void
     {
-        abort_unless($this->puedeEditar, 403);
+        $this->authorize('update', $this->cliente);
 
         $this->validate([
             'equipo_contrato_id' => ['required', 'exists:contratos,id'],
@@ -197,7 +198,7 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function retirarEquipo(int $id): void
     {
-        abort_unless($this->puedeEditar, 403);
+        $this->authorize('update', $this->cliente);
 
         EquipoInstalado::whereKey($id)->update(['estado' => 'retirado']);
 

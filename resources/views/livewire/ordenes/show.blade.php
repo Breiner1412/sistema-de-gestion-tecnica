@@ -4,7 +4,6 @@ use App\Models\Diagnostico;
 use App\Models\Inventario;
 use App\Models\MaterialOrden;
 use App\Models\OrdenTrabajo;
-use App\Models\User;
 use App\Services\CierreDeVisita;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -26,6 +25,10 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function mount(OrdenTrabajo $orden): void
     {
+        // Antes no se comprobaba nada aquí: cualquier técnico de campo abría la
+        // visita de otro, con la dirección y el teléfono del cliente.
+        $this->authorize('view', $orden);
+
         $this->orden = $orden;
         $this->estado = $orden->estado;
         $this->observaciones = $orden->observaciones ?? '';
@@ -60,18 +63,12 @@ new #[Layout('layouts.app')] class extends Component {
     #[Computed]
     public function puedeEditar(): bool
     {
-        $usuario = auth()->user();
-
-        if ($usuario->tieneRol(...User::ROLES_GESTION)) {
-            return true;
-        }
-
-        return $usuario->tecnico?->id === $this->orden->tecnico_id;
+        return auth()->user()->can('update', $this->orden);
     }
 
     public function agregarMaterial(): void
     {
-        abort_unless($this->puedeEditar, 403);
+        $this->authorize('update', $this->orden);
 
         $this->validate([
             'material_id' => 'required|exists:inventario,id',
@@ -97,7 +94,7 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function quitarMaterial(int $id): void
     {
-        abort_unless($this->puedeEditar, 403);
+        $this->authorize('update', $this->orden);
 
         DB::transaction(fn () => MaterialOrden::where('orden_id', $this->orden->id)->whereKey($id)->first()?->delete());
 
@@ -109,7 +106,7 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function actualizar(): void
     {
-        abort_unless($this->puedeEditar, 403);
+        $this->authorize('update', $this->orden);
 
         $reglas = [
             'estado' => [Rule::in(array_keys(OrdenTrabajo::ESTADOS))],

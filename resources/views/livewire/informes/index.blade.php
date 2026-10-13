@@ -18,7 +18,7 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function mount(): void
     {
-        abort_unless(auth()->user()->tieneRol(User::ROL_ADMIN, User::ROL_GERENTE), 403);
+        $this->authorize('viewAny', InformeMensual::class);
 
         $anterior = now()->subMonth();
         $this->anio = $this->anio ?: (string) $anterior->year;
@@ -68,6 +68,15 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function abrir(int $tecnicoId)
     {
+        $this->authorize('create', InformeMensual::class);
+
+        // Solo hay informe de quien atiende casos en el nivel 2 (aunque hoy
+        // esté inactivo: el informe de un mes pasado sigue siendo suyo).
+        abort_unless(
+            User::whereKey($tecnicoId)->whereIn('rol', [User::ROL_TECNICO_SOPORTE, User::ROL_ADMIN])->exists(),
+            404,
+        );
+
         $informe = InformeMensual::firstOrCreate(
             ['tecnico_id' => $tecnicoId, 'anio' => (int) $this->anio, 'mes' => (int) $this->mes],
             ['generado_por_id' => auth()->id()],
