@@ -32,3 +32,9 @@ it('sin TRUSTED_PROXIES no confía en nadie', function () {
         ->get('/_prueba-proxy')
         ->assertSee('|172.30.0.2|');
 });
+
+it('la IP fija de Caddy es la que le da el entorno local', function () {
+    $compose = file_get_contents(base_path('docker-compose.local.yml'));
+
+    expect($compose)->toContain('ipv4_address: '.config('trustedproxy.ip_caddy'));
+});

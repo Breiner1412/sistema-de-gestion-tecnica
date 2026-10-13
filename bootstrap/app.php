@@ -20,9 +20,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // celular: una cuenta desactivada se queda fuera en la siguiente petición.
         $middleware->appendToGroup('web', \App\Http\Middleware\CuentaActiva::class);
 
-        // Las IPs salen de config/trustedproxy.php (TRUSTED_PROXIES), que el
-        // middleware lee en cada petición. Aquí solo se fijan las cabeceras
-        // que manda Caddy; el resto (ELB, prefijo) no se acepta de nadie.
+        // Proxy de confianza: Caddy, con IP fija 172.30.0.2 en la red "proxy".
+        // La IP vive en config/trustedproxy.php y no aquí a propósito: este
+        // bloque corre antes de que Laravel cargue el .env, así que un
+        // TRUSTED_PROXIES escrito en el .env se ignoraría en silencio. El
+        // middleware lee la configuración en cada petición. Aquí se fijan las
+        // cabeceras que manda Caddy; el resto (ELB, prefijo) no se acepta.
         $middleware->trustProxies(headers: Request::HEADER_X_FORWARDED_FOR
             | Request::HEADER_X_FORWARDED_HOST
             | Request::HEADER_X_FORWARDED_PORT
