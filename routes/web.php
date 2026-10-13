@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\CierreVisitaController;
 use App\Http\Controllers\EvidenciaController;
+use App\Http\Controllers\PreferenciasController;
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
 
@@ -13,6 +14,10 @@ Route::middleware(['auth'])->group(function () {
         ->name('dashboard');
 
     Route::view('profile', 'profile')->name('profile');
+
+    // Tema de la interfaz: lo aplica el navegador al momento; esto lo recuerda.
+    Route::post('preferencias/tema', [PreferenciasController::class, 'tema'])->name('preferencias.tema');
+    Route::post('preferencias/tema-campo', [PreferenciasController::class, 'temaCampo'])->name('preferencias.tema-campo');
 
     // Gestión de casos: primer nivel, nivel 2, redes y dirección.
     Route::middleware('role:admin,gerente,call_center,tecnico_soporte,ingeniero_redes')->group(function () {
