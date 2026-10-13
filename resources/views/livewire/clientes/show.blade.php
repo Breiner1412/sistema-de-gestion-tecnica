@@ -217,171 +217,182 @@ new #[Layout('layouts.app')] class extends Component {
     }
 }; ?>
 
-<div class="p-6 max-w-4xl">
+<div class="mx-auto flex max-w-[1100px] flex-col gap-4 px-4 py-5 sm:px-6 lg:py-6">
+    <x-mensajes />
 
-    @if (session('mensaje'))
-        <div class="bg-green-100 text-green-800 p-3 rounded mb-4">{{ session('mensaje') }}</div>
-    @endif
-
-    <a href="{{ route('clientes.index') }}" wire:navigate class="text-blue-600 text-sm">&larr; Volver a clientes</a>
-
-    <div class="flex flex-wrap justify-between items-start gap-3 mt-2 mb-4">
-        <div>
-            <h1 class="text-2xl font-bold text-slate-800">{{ $cliente->nombre }}</h1>
-            <p class="text-sm text-slate-500">
-                {{ $cliente->codigo_abonado ?? 'Sin código de abonado' }} · CC/NIT {{ $cliente->cedula }}
-            </p>
-        </div>
-        <div class="flex gap-2">
+    <x-encabezado :titulo="$cliente->nombre">
+        <x-slot:antes>
+            <a href="{{ route('clientes.index') }}" wire:navigate class="inline-flex items-center gap-1 text-tinta-3 no-underline hover:text-acento-texto">
+                <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                Clientes
+            </a>
+        </x-slot:antes>
+        <x-slot:acciones>
+            <x-estado :estado="$cliente->estado" :etiqueta="ucfirst($cliente->estado)" />
             @if ($this->puedeEditar)
-                <a href="{{ route('clientes.edit', $cliente) }}" wire:navigate class="px-4 py-2 rounded border">
-                    Editar
-                </a>
-                <a href="{{ route('soportes.create', ['cliente' => $cliente->id]) }}" wire:navigate class="bg-blue-600 text-white px-4 py-2 rounded">
+                <x-boton :href="route('clientes.edit', $cliente)" wire:navigate>Editar</x-boton>
+                <x-boton variante="primario" :href="route('soportes.create', ['cliente' => $cliente->id])" wire:navigate>
+                    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>
                     Nuevo caso
-                </a>
+                </x-boton>
             @endif
-        </div>
-    </div>
+        </x-slot:acciones>
+    </x-encabezado>
+    <p class="-mt-2 font-mono text-[13px] text-tinta-3">
+        {{ $cliente->codigo_abonado ?? 'Sin código de abonado' }} · CC/NIT {{ $cliente->cedula }}
+    </p>
 
     {{-- Reincidencia --}}
     @if (($this->recurrencia['total'] ?? 0) > 0 && $this->recurrencia['es_recurrente'])
-        <div class="bg-amber-50 border border-amber-300 rounded p-4 mb-4">
-            <div class="flex flex-wrap items-center gap-2 mb-2">
-                <h2 class="font-semibold text-amber-900">Abonado recurrente</h2>
-                <span class="px-2 py-0.5 rounded bg-amber-200 text-amber-900 text-xs">
+        <section class="tarjeta border-l-[3px] border-l-recurrente p-4">
+            <div class="mb-2 flex flex-wrap items-center gap-2">
+                <h2 class="flex items-center gap-2 font-semibold text-recurrente">
+                    <span class="rounded-[3px] bg-recurrente-fondo px-1.5 text-[11px] leading-[18px]">↻ {{ $this->recurrencia['total'] }}</span>
+                    Abonado recurrente
+                </h2>
+                <span class="inline-flex h-[22px] items-center rounded-full border border-recurrente/40 px-2 text-xs font-medium text-recurrente">
                     {{ $this->recurrencia['motivo'] === 'sin_contacto' ? 'No se logra contactar' : 'Falla recurrente' }}
                 </span>
             </div>
 
-            <p class="text-sm text-amber-900">
-                {{ $this->recurrencia['total'] }} reportes en total,
-                {{ $this->recurrencia['ultimos12'] }} en los últimos 12 meses.
+            <p class="text-sm">
+                <span class="font-mono">{{ $this->recurrencia['total'] }}</span> reportes en total,
+                <span class="font-mono">{{ $this->recurrencia['ultimos12'] }}</span> en los últimos 12 meses.
                 @if ($this->recurrencia['sin_contacto'] > 0)
-                    {{ $this->recurrencia['sin_contacto'] }} terminaron sin poder contactarlo.
+                    <span class="font-mono">{{ $this->recurrencia['sin_contacto'] }}</span> terminaron sin poder contactarlo.
                 @endif
             </p>
 
             @if ($this->recurrencia['diagnosticos']->count())
-                <p class="text-sm text-amber-900 mt-2">
+                <p class="mt-2 text-sm">
                     <span class="font-medium">Se le ha diagnosticado:</span>
                     @foreach ($this->recurrencia['diagnosticos'] as $nombre => $veces)
-                        {{ $nombre }} ({{ $veces }}){{ !$loop->last ? ',' : '' }}
+                        {{ $nombre }} (<span class="font-mono">{{ $veces }}</span>){{ !$loop->last ? ',' : '' }}
                     @endforeach
                 </p>
             @endif
 
-            <p class="text-xs text-amber-800 mt-2">
+            <p class="mt-2 text-[13px] text-tinta-3">
                 {{ $this->recurrencia['motivo'] === 'sin_contacto'
                     ? 'Insistir por el mismo canal no está funcionando: conviene agendar visita o buscar otro contacto.'
                     : 'El patrón sugiere una causa de fondo en la instalación, no una falla nueva cada vez.' }}
             </p>
-        </div>
+        </section>
     @endif
 
     {{-- Datos --}}
-    <div class="bg-slate-50 border rounded p-4 mb-4 grid gap-x-6 gap-y-1 text-sm text-slate-800 md:grid-cols-2">
-        <p><span class="font-semibold">Teléfono:</span> {{ $cliente->telefono ?? '—' }}</p>
-        <p><span class="font-semibold">Correo:</span> {{ $cliente->correo ?? '—' }}</p>
-        <p class="md:col-span-2"><span class="font-semibold">Dirección:</span> {{ $cliente->direccion ?? '—' }}</p>
-        <p><span class="font-semibold">Estado:</span> {{ ucfirst($cliente->estado) }}</p>
-        @if ($cliente->latitud && $cliente->longitud)
-            <p><span class="font-semibold">Ubicación:</span> {{ $cliente->latitud }}, {{ $cliente->longitud }}</p>
-        @endif
-    </div>
+    <section class="tarjeta p-4">
+        <h2 class="titulo-seccion mb-3">Datos de contacto</h2>
+        <dl class="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+            <div>
+                <dt class="text-xs font-medium text-tinta-3">Teléfono</dt>
+                <dd class="font-mono text-[13px]">{{ $cliente->telefono ?? '—' }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium text-tinta-3">Correo</dt>
+                <dd class="break-all">{{ $cliente->correo ?? '—' }}</dd>
+            </div>
+            <div class="sm:col-span-2">
+                <dt class="text-xs font-medium text-tinta-3">Dirección</dt>
+                <dd>{{ $cliente->direccion ?? '—' }}</dd>
+            </div>
+            @if ($cliente->latitud && $cliente->longitud)
+                <div>
+                    <dt class="text-xs font-medium text-tinta-3">Ubicación</dt>
+                    <dd class="font-mono text-[13px]">{{ $cliente->latitud }}, {{ $cliente->longitud }}</dd>
+                </div>
+            @endif
+        </dl>
+    </section>
 
     {{-- Contratos --}}
-    <div class="bg-white border rounded p-4 mb-4">
-        <div class="flex justify-between items-center mb-3">
-            <h2 class="font-semibold text-slate-800">Contratos</h2>
+    <section class="tarjeta p-4">
+        <div class="mb-3 flex items-center justify-between gap-3">
+            <h2 class="titulo-seccion">Contratos</h2>
             @if ($this->puedeEditar)
-                <button wire:click="nuevoContrato" class="text-sm text-blue-600">+ Agregar contrato</button>
+                <x-boton variante="fantasma" tamano="chico" wire:click="nuevoContrato">+ Agregar contrato</x-boton>
             @endif
         </div>
 
-        @forelse ($cliente->contratos as $contrato)
-            <div class="border rounded p-3 mb-3 last:mb-0">
-                <div class="flex flex-wrap justify-between items-start gap-2">
-                    <div class="text-sm">
-                        <p class="font-medium text-slate-800">{{ $contrato->numero_contrato }}</p>
-                        <p class="text-slate-600">
-                            Desde {{ $contrato->fecha_inicio?->format('d/m/Y') }}
-                            @if ($contrato->fecha_fin) hasta {{ $contrato->fecha_fin->format('d/m/Y') }} @endif
-                            @if ($contrato->valor_contrato)
-                                · ${{ number_format($contrato->valor_contrato, 0, ',', '.') }}
-                            @endif
-                        </p>
-                    </div>
-                    <div class="flex items-center gap-3">
-                        <span @class([
-                            'px-2 py-1 rounded text-xs',
-                            'bg-green-200 text-green-900' => $contrato->estado === 'activo',
-                            'bg-yellow-200 text-yellow-900' => $contrato->estado === 'suspendido',
-                            'bg-slate-200 text-slate-700' => $contrato->estado === 'retirado',
-                        ])>{{ ucfirst($contrato->estado) }}</span>
-
-                        @if ($this->puedeEditar)
-                            <button wire:click="editarContrato({{ $contrato->id }})" class="text-xs text-blue-600">Editar</button>
-                            <button wire:click="nuevoEquipo({{ $contrato->id }})" class="text-xs text-blue-600">+ Equipo</button>
-                        @endif
-                    </div>
-                </div>
-
-                @if ($contrato->equipos->count())
-                    <ul class="mt-2 pt-2 border-t text-xs divide-y">
-                        @foreach ($contrato->equipos as $equipo)
-                            <li class="py-1.5 flex justify-between items-center">
-                                <span @class(['text-slate-400 line-through' => $equipo->estado === 'retirado'])>
-                                    {{ ucfirst($equipo->tipo) }}
-                                    @if ($equipo->modelo) · {{ $equipo->modelo }} @endif
-                                    @if ($equipo->numero_serie) · s/n {{ $equipo->numero_serie }} @endif
-                                    @if ($equipo->fecha_instalacion)
-                                        <span class="text-slate-500">({{ $equipo->fecha_instalacion->format('d/m/Y') }})</span>
-                                    @endif
-                                </span>
-                                @if ($this->puedeEditar && $equipo->estado !== 'retirado')
-                                    <button wire:click="retirarEquipo({{ $equipo->id }})"
-                                        wire:confirm="¿Marcar este equipo como retirado?"
-                                        class="text-red-600">Retirar</button>
+        <div class="flex flex-col gap-3">
+            @forelse ($cliente->contratos as $contrato)
+                <div class="rounded-tarjeta border border-linea p-3" wire:key="contrato-{{ $contrato->id }}">
+                    <div class="flex flex-wrap items-start justify-between gap-2">
+                        <div class="text-sm">
+                            <p class="font-mono font-medium">{{ $contrato->numero_contrato }}</p>
+                            <p class="text-[13px] text-tinta-3">
+                                Desde <span class="font-mono">{{ $contrato->fecha_inicio?->format('d/m/Y') }}</span>
+                                @if ($contrato->fecha_fin) hasta <span class="font-mono">{{ $contrato->fecha_fin->format('d/m/Y') }}</span> @endif
+                                @if ($contrato->valor_contrato)
+                                    · <span class="font-mono">${{ number_format($contrato->valor_contrato, 0, ',', '.') }}</span>
                                 @endif
-                            </li>
-                        @endforeach
-                    </ul>
-                @endif
-            </div>
-        @empty
-            <p class="text-sm text-slate-500">Este cliente todavía no tiene contratos registrados.</p>
-        @endforelse
+                            </p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <x-estado :estado="$contrato->estado" :etiqueta="ucfirst($contrato->estado)" />
+
+                            @if ($this->puedeEditar)
+                                <x-boton tamano="chico" wire:click="editarContrato({{ $contrato->id }})">Editar</x-boton>
+                                <x-boton tamano="chico" wire:click="nuevoEquipo({{ $contrato->id }})">+ Equipo</x-boton>
+                            @endif
+                        </div>
+                    </div>
+
+                    @if ($contrato->equipos->count())
+                        <ul class="mt-3 divide-y divide-linea-suave border-t border-linea-suave text-[13px]">
+                            @foreach ($contrato->equipos as $equipo)
+                                <li class="flex items-center justify-between gap-3 py-1.5">
+                                    <span @class(['text-tinta-3 line-through' => $equipo->estado === 'retirado', 'text-tinta-2' => $equipo->estado !== 'retirado'])>
+                                        <span class="font-medium text-tinta">{{ ucfirst($equipo->tipo) }}</span>
+                                        @if ($equipo->modelo) · {{ $equipo->modelo }} @endif
+                                        @if ($equipo->numero_serie) · <span class="font-mono">s/n {{ $equipo->numero_serie }}</span> @endif
+                                        @if ($equipo->fecha_instalacion)
+                                            <span class="font-mono text-tinta-3">({{ $equipo->fecha_instalacion->format('d/m/Y') }})</span>
+                                        @endif
+                                    </span>
+                                    @if ($this->puedeEditar && $equipo->estado !== 'retirado')
+                                        <x-boton variante="fantasma" tamano="chico" class="!text-peligro" wire:click="retirarEquipo({{ $equipo->id }})"
+                                            wire:confirm="¿Marcar este equipo como retirado?">Retirar</x-boton>
+                                    @endif
+                                </li>
+                            @endforeach
+                        </ul>
+                    @endif
+                </div>
+            @empty
+                <p class="text-sm text-tinta-3">Este cliente todavía no tiene contratos registrados.</p>
+            @endforelse
+        </div>
 
         {{-- Panel de contrato --}}
         @if ($panel === 'contrato')
-            <div class="border-t pt-3 mt-3 space-y-3">
-                <h3 class="font-medium text-slate-800">{{ $contrato_id ? 'Editar contrato' : 'Nuevo contrato' }}</h3>
+            <div class="mt-4 space-y-3 border-t border-linea pt-4">
+                <h3 class="font-semibold">{{ $contrato_id ? 'Editar contrato' : 'Nuevo contrato' }}</h3>
 
-                <div class="grid gap-3 md:grid-cols-2">
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
-                        <label class="block text-xs font-medium text-slate-600 mb-1">Número de contrato</label>
-                        <input type="text" wire:model="numero_contrato" class="w-full border rounded p-2 text-sm">
-                        @error('numero_contrato') <span class="text-red-600 text-xs">{{ $message }}</span> @enderror
+                        <label for="numero-contrato" class="etiqueta">Número de contrato</label>
+                        <input id="numero-contrato" type="text" wire:model="numero_contrato" class="control h-9">
+                        @error('numero_contrato') <p class="error-campo">{{ $message }}</p> @enderror
                     </div>
                     <div>
-                        <label class="block text-xs font-medium text-slate-600 mb-1">Valor mensual</label>
-                        <input type="number" step="1" wire:model="valor_contrato" class="w-full border rounded p-2 text-sm">
-                        @error('valor_contrato') <span class="text-red-600 text-xs">{{ $message }}</span> @enderror
+                        <label for="valor-contrato" class="etiqueta">Valor mensual</label>
+                        <input id="valor-contrato" type="number" step="1" wire:model="valor_contrato" class="control h-9 font-mono">
+                        @error('valor_contrato') <p class="error-campo">{{ $message }}</p> @enderror
                     </div>
                     <div>
-                        <label class="block text-xs font-medium text-slate-600 mb-1">Fecha de inicio</label>
-                        <input type="date" wire:model="fecha_inicio" class="w-full border rounded p-2 text-sm">
-                        @error('fecha_inicio') <span class="text-red-600 text-xs">{{ $message }}</span> @enderror
+                        <label for="fecha-inicio" class="etiqueta">Fecha de inicio</label>
+                        <input id="fecha-inicio" type="date" wire:model="fecha_inicio" class="control h-9">
+                        @error('fecha_inicio') <p class="error-campo">{{ $message }}</p> @enderror
                     </div>
                     <div>
-                        <label class="block text-xs font-medium text-slate-600 mb-1">Fecha de fin (opcional)</label>
-                        <input type="date" wire:model="fecha_fin" class="w-full border rounded p-2 text-sm">
-                        @error('fecha_fin') <span class="text-red-600 text-xs">{{ $message }}</span> @enderror
+                        <label for="fecha-fin" class="etiqueta">Fecha de fin (opcional)</label>
+                        <input id="fecha-fin" type="date" wire:model="fecha_fin" class="control h-9">
+                        @error('fecha_fin') <p class="error-campo">{{ $message }}</p> @enderror
                     </div>
                     <div>
-                        <label class="block text-xs font-medium text-slate-600 mb-1">Estado</label>
-                        <select wire:model="contrato_estado" class="w-full border rounded p-2 text-sm">
+                        <label for="contrato-estado" class="etiqueta">Estado</label>
+                        <select id="contrato-estado" wire:model="contrato_estado" class="control h-9 py-0">
                             <option value="activo">Activo</option>
                             <option value="suspendido">Suspendido</option>
                             <option value="retirado">Retirado</option>
@@ -390,21 +401,21 @@ new #[Layout('layouts.app')] class extends Component {
                 </div>
 
                 <div class="flex gap-2">
-                    <button wire:click="guardarContrato" class="bg-blue-600 text-white px-4 py-2 rounded text-sm">Guardar</button>
-                    <button wire:click="$set('panel', '')" class="px-4 py-2 rounded border text-sm">Cancelar</button>
+                    <x-boton variante="primario" wire:click="guardarContrato">Guardar</x-boton>
+                    <x-boton variante="fantasma" wire:click="$set('panel', '')">Cancelar</x-boton>
                 </div>
             </div>
         @endif
 
         {{-- Panel de equipo --}}
         @if ($panel === 'equipo')
-            <div class="border-t pt-3 mt-3 space-y-3">
-                <h3 class="font-medium text-slate-800">Nuevo equipo instalado</h3>
+            <div class="mt-4 space-y-3 border-t border-linea pt-4">
+                <h3 class="font-semibold">Nuevo equipo instalado</h3>
 
-                <div class="grid gap-3 md:grid-cols-4">
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <div>
-                        <label class="block text-xs font-medium text-slate-600 mb-1">Tipo</label>
-                        <select wire:model="equipo_tipo" class="w-full border rounded p-2 text-sm">
+                        <label for="equipo-tipo" class="etiqueta">Tipo</label>
+                        <select id="equipo-tipo" wire:model="equipo_tipo" class="control h-9 py-0">
                             <option value="router">Router / ONU</option>
                             <option value="decodificador">Decodificador</option>
                             <option value="antena">Antena</option>
@@ -413,65 +424,66 @@ new #[Layout('layouts.app')] class extends Component {
                         </select>
                     </div>
                     <div>
-                        <label class="block text-xs font-medium text-slate-600 mb-1">Modelo</label>
-                        <input type="text" wire:model="equipo_modelo" class="w-full border rounded p-2 text-sm">
+                        <label for="equipo-modelo" class="etiqueta">Modelo</label>
+                        <input id="equipo-modelo" type="text" wire:model="equipo_modelo" class="control h-9">
                     </div>
                     <div>
-                        <label class="block text-xs font-medium text-slate-600 mb-1">Número de serie</label>
-                        <input type="text" wire:model="equipo_serie" class="w-full border rounded p-2 text-sm">
+                        <label for="equipo-serie" class="etiqueta">Número de serie</label>
+                        <input id="equipo-serie" type="text" wire:model="equipo_serie" class="control h-9 font-mono">
                     </div>
                     <div>
-                        <label class="block text-xs font-medium text-slate-600 mb-1">Instalación</label>
-                        <input type="date" wire:model="equipo_fecha" class="w-full border rounded p-2 text-sm">
+                        <label for="equipo-fecha" class="etiqueta">Instalación</label>
+                        <input id="equipo-fecha" type="date" wire:model="equipo_fecha" class="control h-9">
                     </div>
                 </div>
 
                 <div class="flex gap-2">
-                    <button wire:click="guardarEquipo" class="bg-blue-600 text-white px-4 py-2 rounded text-sm">Guardar</button>
-                    <button wire:click="$set('panel', '')" class="px-4 py-2 rounded border text-sm">Cancelar</button>
+                    <x-boton variante="primario" wire:click="guardarEquipo">Guardar</x-boton>
+                    <x-boton variante="fantasma" wire:click="$set('panel', '')">Cancelar</x-boton>
                 </div>
             </div>
         @endif
-    </div>
+    </section>
 
     {{-- Historial de casos --}}
-    <div class="bg-white border rounded p-4">
-        <div class="flex justify-between items-center mb-3">
-            <h2 class="font-semibold text-slate-800">Últimos casos</h2>
+    <section>
+        <div class="mb-2 flex items-center justify-between gap-3">
+            <h2 class="titulo-seccion">Últimos casos</h2>
             @if (($this->recurrencia['total'] ?? 0) > 20)
                 <a href="{{ route('soportes.index', ['q' => $cliente->codigo_abonado ?? $cliente->cedula]) }}"
-                    wire:navigate class="text-sm text-blue-600">Ver los {{ $this->recurrencia['total'] }}</a>
+                    wire:navigate class="text-[13px] font-medium">Ver los {{ $this->recurrencia['total'] }}</a>
             @endif
         </div>
 
         @if ($cliente->soportes->count())
-            <table class="w-full text-sm">
+            <x-tabla minimo="760px">
                 <thead>
-                    <tr class="text-left text-slate-500 border-b">
-                        <th class="py-1 font-medium">N°</th>
-                        <th class="py-1 font-medium">Tipo</th>
-                        <th class="py-1 font-medium">Estado</th>
-                        <th class="py-1 font-medium">Diagnóstico</th>
-                        <th class="py-1 font-medium">Responsable</th>
-                        <th class="py-1 font-medium">Fecha</th>
+                    <tr>
+                        <th>N°</th>
+                        <th>Tipo</th>
+                        <th>Estado</th>
+                        <th>Diagnóstico</th>
+                        <th>Responsable</th>
+                        <th class="text-right">Fecha</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach ($cliente->soportes as $soporte)
-                        <tr class="border-b last:border-0 hover:bg-slate-50 cursor-pointer"
-                            onclick="window.location='{{ route('soportes.show', $soporte) }}'">
-                            <td class="py-1.5 font-mono text-xs">{{ $soporte->numero_soporte ?? $soporte->id }}</td>
-                            <td class="py-1.5">{{ $soporte->etiquetaTipo() }}</td>
-                            <td class="py-1.5">{{ $soporte->etiquetaEstado() }}</td>
-                            <td class="py-1.5 text-slate-600 text-xs">{{ $soporte->diagnostico->nombre ?? '—' }}</td>
-                            <td class="py-1.5 text-slate-600">{{ $soporte->tecnicoSoporte->name ?? '—' }}</td>
-                            <td class="py-1.5 text-slate-500 text-xs">{{ $soporte->created_at->format('d/m/Y') }}</td>
+                        <tr class="cursor-pointer" onclick="window.location='{{ route('soportes.show', $soporte) }}'">
+                            <td>
+                                <a href="{{ route('soportes.show', $soporte) }}" class="whitespace-nowrap font-mono font-medium text-tinta no-underline hover:text-acento-texto hover:underline">{{ $soporte->numero_soporte ?? $soporte->id }}</a>
+                            </td>
+                            <td class="text-tinta-2">{{ $soporte->etiquetaTipo() }}</td>
+                            <td><x-estado :estado="$soporte->estado" :etiqueta="$soporte->etiquetaEstado()" /></td>
+                            <td class="text-tinta-2">{{ $soporte->diagnostico->nombre ?? '—' }}</td>
+                            <td class="text-tinta-2">{{ $soporte->tecnicoSoporte->name ?? '—' }}</td>
+                            <td class="text-right font-mono text-xs text-tinta-3">{{ $soporte->created_at->format('d/m/Y') }}</td>
                         </tr>
                     @endforeach
                 </tbody>
-            </table>
+            </x-tabla>
         @else
-            <p class="text-sm text-slate-500">Sin casos registrados.</p>
+            <p class="tarjeta p-4 text-sm text-tinta-3">Sin casos registrados.</p>
         @endif
-    </div>
+    </section>
 </div>

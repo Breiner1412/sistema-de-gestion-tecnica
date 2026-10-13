@@ -313,100 +313,99 @@ new #[Layout('layouts.app')] class extends Component {
     }
 }; ?>
 
-<div class="p-6 max-w-3xl">
+<div class="mx-auto flex max-w-[1200px] flex-col gap-4 px-4 py-5 sm:px-6 lg:py-6">
+    <x-mensajes />
 
-    @if (session('mensaje'))
-        <div class="bg-green-100 text-green-800 p-3 rounded mb-4">{{ session('mensaje') }}</div>
-    @endif
-    @if (session('error'))
-        <div class="bg-red-100 text-red-800 p-3 rounded mb-4">{{ session('error') }}</div>
-    @endif
-
-    <a href="{{ route('soportes.index') }}" wire:navigate class="text-blue-600 text-sm">&larr; Volver a la bandeja</a>
-
-    <div class="flex flex-wrap items-center gap-3 mt-2 mb-4">
-        <h1 class="text-2xl font-bold text-slate-800">{{ $soporte->numero_soporte ?? 'Caso #'.$soporte->id }}</h1>
-
-        <span @class([
-            'px-3 py-1 rounded text-sm font-semibold',
-            'bg-yellow-200 text-yellow-900' => $soporte->estado === 'pendiente',
-            'bg-blue-200 text-blue-900' => $soporte->estado === 'en_proceso',
-            'bg-cyan-200 text-cyan-900' => $soporte->estado === 'seguimiento',
-            'bg-purple-200 text-purple-900' => $soporte->estado === 'enviado_tecnico',
-            'bg-slate-800 text-white' => $soporte->estado === 'escalado_n3',
-            'bg-orange-200 text-orange-900' => $soporte->estado === 'sin_contacto',
-            'bg-green-200 text-green-900' => $soporte->estado === 'solucionado',
-            'bg-red-200 text-red-900' => $soporte->estado === 'cancelado',
-            'bg-slate-200 text-slate-700' => $soporte->estado === 'cerrado_sin_contacto',
-        ])>{{ $soporte->etiquetaEstado() }}</span>
-
-        @if ($soporte->esInmediato())
-            <span class="px-2 py-1 rounded bg-red-600 text-white text-xs font-semibold">Inmediato</span>
-        @endif
-
-        @if ($soporte->escalado_nivel_3)
-            <span class="px-2 py-1 rounded bg-slate-800 text-white text-xs">Pasó por nivel 3</span>
-        @endif
-    </div>
+    <x-encabezado :titulo="$soporte->numero_soporte ?? 'Caso #'.$soporte->id"
+        :subtitulo="($soporte->cliente->nombre ?? 'Sin cliente').' · '.$soporte->etiquetaTipo().' · entró por '.$soporte->etiquetaCanal()">
+        <x-slot:antes>
+            <a href="{{ route('soportes.index') }}" wire:navigate class="inline-flex items-center gap-1 text-tinta-3 no-underline hover:text-acento-texto">
+                <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                Bandeja de casos
+            </a>
+        </x-slot:antes>
+        <x-slot:acciones>
+            <x-estado :estado="$soporte->estado" :etiqueta="$soporte->etiquetaEstado()" class="h-7 px-3 text-[13px]" />
+            @if ($soporte->esInmediato())
+                <x-inmediata />
+            @endif
+            @if ($soporte->escalado_nivel_3)
+                <span class="inline-flex h-[22px] items-center gap-1.5 rounded-full border border-linea px-2 text-xs font-medium text-tinta-2">
+                    <span class="size-[7px] rotate-45 rounded-[1px] bg-estado-escalado" aria-hidden="true"></span>
+                    Pasó por nivel 3
+                </span>
+            @endif
+        </x-slot:acciones>
+    </x-encabezado>
 
     {{-- Reloj --}}
     @unless ($soporte->estaCerrado())
         @php $semaforo = $soporte->semaforoSla(); @endphp
-        <div @class([
-            'border rounded p-3 mb-4 flex items-center justify-between text-sm',
-            'bg-green-50 border-green-200' => $semaforo === 'ok',
-            'bg-yellow-50 border-yellow-200' => $semaforo === 'atencion',
-            'bg-orange-50 border-orange-200' => $semaforo === 'riesgo',
-            'bg-red-50 border-red-200' => $semaforo === 'vencido',
-            'bg-slate-50 border-slate-200' => $semaforo === 'pausado',
-        ])>
-            <div>
-                <span class="font-semibold text-slate-800">
+        <section @class([
+            'tarjeta flex flex-wrap items-center justify-between gap-3 p-4',
+            'border-sla-vencido' => $semaforo === 'vencido',
+        ]) aria-label="Reloj de SLA">
+            <div class="flex min-w-0 flex-col gap-1.5">
+                <x-sla :soporte="$soporte" class="[&>span:last-child]:w-[220px]" />
+                <p class="text-[13px] text-tinta-2">
                     @if ($semaforo === 'pausado')
-                        Reloj en pausa
+                        Reloj en pausa: el caso espera a un tercero, el tiempo no corre contra el nivel 2.
                     @elseif ($semaforo === 'vencido')
-                        SLA incumplido
+                        SLA incumplido. Venció el <span class="font-mono">{{ $soporte->sla_vence_at?->format('d/m/Y H:i') ?? '—' }}</span>.
                     @else
-                        Quedan {{ $soporte->restanteLegible() }}
+                        Quedan {{ $soporte->restanteLegible() }} · vence el <span class="font-mono">{{ $soporte->sla_vence_at?->format('d/m/Y H:i') ?? '—' }}</span>
                     @endif
-                </span>
-                <span class="text-slate-600">
-                    @if ($semaforo === 'pausado')
-                        — el caso espera a un tercero, el tiempo no corre contra el nivel 2.
-                    @else
-                        — vence el {{ $soporte->sla_vence_at?->format('d/m/Y H:i') ?? '—' }}
-                    @endif
-                </span>
+                </p>
             </div>
-            <span class="text-xs text-slate-500">{{ $soporte->porcentajeSla() }}% consumido</span>
-        </div>
+            <div class="ml-auto text-right">
+                <p class="font-mono text-[22px] font-semibold leading-none">{{ $soporte->porcentajeSla() }}<span class="text-sm text-tinta-3">%</span></p>
+                <p class="mt-1 text-xs text-tinta-3">consumido</p>
+            </div>
+        </section>
     @endunless
 
-    {{-- Reincidencia --}}
-    @if ($this->reportesPrevios > 0)
-        @php $dias = config('sla.recurrencia.ventana_dias', 60); @endphp
-        <div class="bg-amber-50 border border-amber-300 rounded p-3 mb-4 text-sm">
-            <p class="text-amber-900">
-                <span class="font-semibold">Abonado reincidente.</span>
-                Ya había reportado <strong>{{ $this->reportesPrevios }}</strong>
-                {{ $this->reportesPrevios === 1 ? 'vez' : 'veces' }} en los {{ $dias }} días previos a este caso,
-                y lleva {{ $this->totalDelAbonado }} en total.
-            </p>
-            <p class="text-amber-800 text-xs mt-1">
-                Antes de repetir el mismo procedimiento, vale la pena mirar qué se le diagnosticó las veces anteriores.
-            </p>
-            <div class="mt-2 flex gap-3">
-                <a href="{{ route('clientes.show', $soporte->cliente_id) }}" wire:navigate
-                    class="text-amber-900 underline text-xs">Ver ficha del abonado</a>
-                <a href="{{ route('soportes.index', ['q' => $soporte->cliente->codigo_abonado ?? $soporte->cliente->cedula]) }}"
-                    wire:navigate class="text-amber-900 underline text-xs">Ver todos sus casos</a>
-            </div>
+    <div class="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div class="order-2 flex min-w-0 flex-col gap-4 lg:order-none">
+            {{-- Reincidencia --}}
+            @if ($this->reportesPrevios > 0)
+                @php $dias = config('sla.recurrencia.ventana_dias', 60); @endphp
+                <section class="tarjeta border-l-[3px] border-l-recurrente p-4 text-sm">
+                    <p class="flex items-center gap-2 font-semibold text-recurrente">
+                        <span class="rounded-[3px] bg-recurrente-fondo px-1.5 text-[11px] leading-[18px]">↻ {{ $this->totalDelAbonado }}</span>
+                        Abonado reincidente
+                    </p>
+                    <p class="mt-1 text-tinta">
+                        Ya había reportado <strong class="font-mono">{{ $this->reportesPrevios }}</strong>
+                        {{ $this->reportesPrevios === 1 ? 'vez' : 'veces' }} en los {{ $dias }} días previos a este caso,
+                        y lleva <span class="font-mono">{{ $this->totalDelAbonado }}</span> en total.
+                    </p>
+                    <p class="mt-1 text-[13px] text-tinta-3">
+                        Antes de repetir el mismo procedimiento, vale la pena mirar qué se le diagnosticó las veces anteriores.
+                    </p>
+                    <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[13px] font-medium">
+                        <a href="{{ route('clientes.show', $soporte->cliente_id) }}" wire:navigate>Ver ficha del abonado</a>
+                        <a href="{{ route('soportes.index', ['q' => $soporte->cliente->codigo_abonado ?? $soporte->cliente->cedula]) }}" wire:navigate>Ver todos sus casos</a>
+                    </div>
+                </section>
+            @endif
+
+            @include('livewire.soportes.partes.datos')
+
+            @include('livewire.soportes.partes.historial')
         </div>
-    @endif
 
-    @include('livewire.soportes.partes.datos')
+        <aside class="order-1 flex flex-col gap-4 lg:sticky lg:top-6 lg:order-none">
+            @include('livewire.soportes.partes.acciones')
 
-    @include('livewire.soportes.partes.acciones')
-
-    @include('livewire.soportes.partes.historial')
+            @if ($soporte->estaCerrado())
+                <section class="tarjeta p-4 text-sm text-tinta-2">
+                    <p class="titulo-seccion mb-1">Caso cerrado</p>
+                    @if ($soporte->fecha_cierre)
+                        <p>Cerrado el <span class="font-mono">{{ $soporte->fecha_cierre->format('d/m/Y H:i') }}</span>.</p>
+                    @endif
+                    <p>Responsable: {{ $soporte->tecnicoSoporte->name ?? 'Sin asignar' }}</p>
+                </section>
+            @endif
+        </aside>
+    </div>
 </div>

@@ -205,52 +205,63 @@ new #[Layout('layouts.app')] class extends Component {
     }
 }; ?>
 
-<div class="p-6 max-w-3xl">
-    <h1 class="text-2xl font-bold mb-4 text-slate-800">Nuevo soporte</h1>
+<div class="mx-auto flex max-w-[760px] flex-col gap-4 px-4 py-5 sm:px-6 lg:py-6">
+    <x-encabezado titulo="Nuevo caso" subtitulo="Solo lo que el primer nivel no pudo resolver en el momento.">
+        <x-slot:antes>
+            <a href="{{ route('soportes.index') }}" wire:navigate class="inline-flex items-center gap-1 text-tinta-3 no-underline hover:text-acento-texto">
+                <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                Bandeja de casos
+            </a>
+        </x-slot:antes>
+    </x-encabezado>
 
-    <form wire:submit="guardar" class="space-y-5">
+    <form wire:submit="guardar" class="flex flex-col gap-4">
 
         {{-- Cliente --}}
-        <div class="bg-white border rounded p-4">
-            <label class="block font-medium mb-1 text-slate-800">Cliente</label>
+        <section class="tarjeta p-4 sm:p-5">
+            <h2 class="titulo-seccion mb-3"><span class="font-mono">1</span> · Cliente</h2>
 
             @if ($this->cliente)
-                <div class="flex items-center justify-between border rounded p-2 bg-slate-50">
-                    <div class="text-sm">
-                        <p class="font-medium">{{ $this->cliente->nombre }}</p>
-                        <p class="text-slate-500 text-xs">
+                <div class="flex items-center justify-between gap-3 rounded-control border border-acento/40 bg-acento-tinte px-3 py-2">
+                    <div class="min-w-0 text-sm">
+                        <p class="truncate font-semibold text-acento-tinte-texto">{{ $this->cliente->nombre }}</p>
+                        <p class="font-mono text-xs text-tinta-2">
                             {{ $this->cliente->codigo_abonado ?? '—' }} · CC {{ $this->cliente->cedula }}
                         </p>
                     </div>
-                    <button type="button" wire:click="quitarCliente" class="text-sm text-red-600">Cambiar</button>
+                    <x-boton tamano="chico" wire:click="quitarCliente">Cambiar</x-boton>
                 </div>
             @else
-                <input type="search" wire:model.live.debounce.400ms="busquedaCliente"
-                    class="w-full border rounded p-2" placeholder="Nombre, cédula o código de abonado (mín. 3 caracteres)">
+                <label for="busqueda-cliente" class="sr-only">Buscar cliente</label>
+                <div class="relative">
+                    <svg class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-tinta-3" width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="m10.5 10.5 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>
+                    <input id="busqueda-cliente" type="search" wire:model.live.debounce.400ms="busquedaCliente"
+                        class="control h-10 pl-9" placeholder="Nombre, cédula o código de abonado (mín. 3 caracteres)">
+                </div>
 
                 @if ($this->resultadosCliente->isNotEmpty())
-                    <ul class="border rounded mt-2 divide-y max-h-60 overflow-y-auto">
+                    <ul class="mt-2 max-h-60 divide-y divide-linea-suave overflow-y-auto rounded-control border border-linea">
                         @foreach ($this->resultadosCliente as $c)
                             <li>
                                 <button type="button" wire:click="seleccionarCliente({{ $c->id }})"
-                                    class="w-full text-left p-2 hover:bg-slate-50 text-sm">
-                                    {{ $c->nombre }}
-                                    <span class="text-slate-500">— {{ $c->codigo_abonado ?? $c->cedula }}</span>
+                                    class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-elevada">
+                                    <span class="font-medium">{{ $c->nombre }}</span>
+                                    <span class="font-mono text-xs text-tinta-3">{{ $c->codigo_abonado ?? $c->cedula }}</span>
                                 </button>
                             </li>
                         @endforeach
                     </ul>
                 @elseif (strlen($busquedaCliente) >= 3)
-                    <p class="text-sm text-slate-500 mt-2">Sin resultados.</p>
+                    <p class="mt-2 text-sm text-tinta-3">Sin resultados.</p>
                 @endif
             @endif
 
-            @error('cliente_id') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
+            @error('cliente_id') <p class="error-campo">{{ $message }}</p> @enderror
 
             @if ($this->cliente && $this->contratos->count())
                 <div class="mt-3">
-                    <label class="block font-medium mb-1 text-slate-800">Contrato (opcional)</label>
-                    <select wire:model="contrato_id" class="w-full border rounded p-2">
+                    <label for="contrato" class="etiqueta">Contrato (opcional)</label>
+                    <select id="contrato" wire:model="contrato_id" class="control h-10 py-0">
                         <option value="">— Sin contrato específico —</option>
                         @foreach ($this->contratos as $contrato)
                             <option value="{{ $contrato->id }}">
@@ -260,138 +271,139 @@ new #[Layout('layouts.app')] class extends Component {
                     </select>
                 </div>
             @endif
-        </div>
+        </section>
 
         {{-- Tipo de solicitud y canal --}}
-        <div class="bg-white border rounded p-4 grid gap-4 md:grid-cols-2">
+        <section class="tarjeta grid gap-4 p-4 sm:grid-cols-2 sm:p-5">
+            <h2 class="titulo-seccion sm:col-span-2"><span class="font-mono">2</span> · Solicitud</h2>
             <div>
-                <label class="block font-medium mb-1 text-slate-800">Tipo de solicitud</label>
-                <select wire:model.live="tipo_solicitud" class="w-full border rounded p-2">
+                <label for="tipo-solicitud" class="etiqueta">Tipo de solicitud</label>
+                <select id="tipo-solicitud" wire:model.live="tipo_solicitud" class="control h-10 py-0">
                     @foreach (\App\Models\Soporte::TIPOS_SOLICITUD as $valor => $etiqueta)
                         <option value="{{ $valor }}">{{ $etiqueta }}</option>
                     @endforeach
                 </select>
             </div>
             <div>
-                <label class="block font-medium mb-1 text-slate-800">¿Por dónde entró?</label>
-                <select wire:model="canal_ingreso" class="w-full border rounded p-2">
+                <label for="canal" class="etiqueta">¿Por dónde entró?</label>
+                <select id="canal" wire:model="canal_ingreso" class="control h-10 py-0">
                     @foreach (\App\Models\Soporte::CANALES as $valor => $etiqueta)
                         <option value="{{ $valor }}">{{ $etiqueta }}</option>
                     @endforeach
                 </select>
             </div>
-        </div>
 
-        {{-- Campos según tipo --}}
-        @if (in_array($tipo_solicitud, ['soporte_remoto', 'sin_internet']))
-            <div class="bg-white border rounded p-4 grid gap-4 md:grid-cols-2">
+            {{-- Campos según tipo --}}
+            @if (in_array($tipo_solicitud, ['soporte_remoto', 'sin_internet']))
                 <div>
-                    <label class="block font-medium mb-1 text-slate-800">Servicio afectado</label>
-                    <select wire:model.live="servicio_afectado" class="w-full border rounded p-2">
+                    <label for="servicio" class="etiqueta">Servicio afectado</label>
+                    <select id="servicio" wire:model.live="servicio_afectado" class="control h-10 py-0">
                         @foreach (\App\Models\Soporte::SERVICIOS as $valor => $etiqueta)
                             <option value="{{ $valor }}">{{ $etiqueta }}</option>
                         @endforeach
                     </select>
                 </div>
                 <div>
-                    <label class="block font-medium mb-1 text-slate-800">Falla reportada</label>
-                    <select wire:model="tipo_falla_id" class="w-full border rounded p-2">
+                    <label for="falla" class="etiqueta">Falla reportada</label>
+                    <select id="falla" wire:model="tipo_falla_id" class="control h-10 py-0">
                         <option value="">— Sin clasificar —</option>
                         @foreach ($this->fallas as $falla)
                             <option value="{{ $falla->id }}">{{ $falla->nombre }}</option>
                         @endforeach
                     </select>
                 </div>
-            </div>
-        @endif
+            @endif
 
-        @if ($tipo_solicitud === 'cambio_plan')
-            <div class="bg-white border rounded p-4 grid gap-4 md:grid-cols-3">
-                <div>
-                    <label class="block font-medium mb-1 text-slate-800">Plan anterior</label>
-                    <select wire:model="plan_anterior_id" class="w-full border rounded p-2">
-                        <option value="">— Sin registrar —</option>
-                        @foreach ($this->planes as $plan)
-                            <option value="{{ $plan->id }}">{{ $plan->nombre }}</option>
-                        @endforeach
-                    </select>
+            @if ($tipo_solicitud === 'cambio_plan')
+                <div class="grid gap-4 border-t border-linea-suave pt-4 sm:col-span-2 sm:grid-cols-3">
+                    <div>
+                        <label for="plan-anterior" class="etiqueta">Plan anterior</label>
+                        <select id="plan-anterior" wire:model="plan_anterior_id" class="control h-10 py-0">
+                            <option value="">— Sin registrar —</option>
+                            @foreach ($this->planes as $plan)
+                                <option value="{{ $plan->id }}">{{ $plan->nombre }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <label for="plan-nuevo" class="etiqueta">Plan nuevo</label>
+                        <select id="plan-nuevo" wire:model="plan_nuevo_id" class="control h-10 py-0">
+                            <option value="">— Selecciona —</option>
+                            @foreach ($this->planes as $plan)
+                                <option value="{{ $plan->id }}">{{ $plan->nombre }}</option>
+                            @endforeach
+                        </select>
+                        @error('plan_nuevo_id') <p class="error-campo">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <label for="tiempo-ejecucion" class="etiqueta">Tiempo de ejecución</label>
+                        <select id="tiempo-ejecucion" wire:model="tiempo_ejecucion" class="control h-10 py-0">
+                            @foreach (\App\Models\SoporteCambioPlan::TIEMPOS_EJECUCION as $valor => $etiqueta)
+                                <option value="{{ $valor }}">{{ $etiqueta }}</option>
+                            @endforeach
+                        </select>
+                    </div>
                 </div>
-                <div>
-                    <label class="block font-medium mb-1 text-slate-800">Plan nuevo</label>
-                    <select wire:model="plan_nuevo_id" class="w-full border rounded p-2">
-                        <option value="">— Selecciona —</option>
-                        @foreach ($this->planes as $plan)
-                            <option value="{{ $plan->id }}">{{ $plan->nombre }}</option>
-                        @endforeach
-                    </select>
-                    @error('plan_nuevo_id') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
-                </div>
-                <div>
-                    <label class="block font-medium mb-1 text-slate-800">Tiempo de ejecución</label>
-                    <select wire:model="tiempo_ejecucion" class="w-full border rounded p-2">
-                        @foreach (\App\Models\SoporteCambioPlan::TIEMPOS_EJECUCION as $valor => $etiqueta)
-                            <option value="{{ $valor }}">{{ $etiqueta }}</option>
-                        @endforeach
-                    </select>
-                </div>
-            </div>
-        @endif
+            @endif
 
-        @if ($tipo_solicitud === 'cambio_titular')
-            <div class="bg-white border rounded p-4 space-y-4">
-                <p class="text-sm text-slate-500">El titular actual es el cliente seleccionado arriba.</p>
-                <div class="grid gap-4 md:grid-cols-3">
-                    <div>
-                        <label class="block font-medium mb-1 text-slate-800">Cédula nuevo titular</label>
-                        <input type="text" wire:model="titular_nuevo_cedula" class="w-full border rounded p-2">
-                        @error('titular_nuevo_cedula') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
+            @if ($tipo_solicitud === 'cambio_titular')
+                <div class="space-y-4 border-t border-linea-suave pt-4 sm:col-span-2">
+                    <p class="text-[13px] text-tinta-3">El titular actual es el cliente seleccionado arriba.</p>
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                        <div>
+                            <label for="titular-cedula" class="etiqueta">Cédula nuevo titular</label>
+                            <input id="titular-cedula" type="text" wire:model="titular_nuevo_cedula" class="control h-10 font-mono">
+                            @error('titular_nuevo_cedula') <p class="error-campo">{{ $message }}</p> @enderror
+                        </div>
+                        <div>
+                            <label for="titular-nombre" class="etiqueta">Nombre nuevo titular</label>
+                            <input id="titular-nombre" type="text" wire:model="titular_nuevo_nombre" class="control h-10">
+                            @error('titular_nuevo_nombre') <p class="error-campo">{{ $message }}</p> @enderror
+                        </div>
+                        <div>
+                            <label for="titular-telefono" class="etiqueta">Teléfono</label>
+                            <input id="titular-telefono" type="text" wire:model="titular_nuevo_telefono" class="control h-10 font-mono" inputmode="tel">
+                        </div>
                     </div>
-                    <div>
-                        <label class="block font-medium mb-1 text-slate-800">Nombre nuevo titular</label>
-                        <input type="text" wire:model="titular_nuevo_nombre" class="w-full border rounded p-2">
-                        @error('titular_nuevo_nombre') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
-                    </div>
-                    <div>
-                        <label class="block font-medium mb-1 text-slate-800">Teléfono</label>
-                        <input type="text" wire:model="titular_nuevo_telefono" class="w-full border rounded p-2">
+                    <div class="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+                        <label class="flex items-center gap-2">
+                            <input type="checkbox" wire:model="incluye_cambio_plan" class="size-4 rounded border-linea bg-superficie text-acento focus:ring-acento-texto">
+                            Incluye cambio de plan
+                        </label>
+                        <label class="flex items-center gap-2">
+                            <input type="checkbox" wire:model="incluye_traslado" class="size-4 rounded border-linea bg-superficie text-acento focus:ring-acento-texto">
+                            Incluye traslado
+                        </label>
                     </div>
                 </div>
-                <div class="flex gap-6 text-sm">
-                    <label class="flex items-center gap-2">
-                        <input type="checkbox" wire:model="incluye_cambio_plan" class="rounded border-slate-300">
-                        Incluye cambio de plan
-                    </label>
-                    <label class="flex items-center gap-2">
-                        <input type="checkbox" wire:model="incluye_traslado" class="rounded border-slate-300">
-                        Incluye traslado
-                    </label>
-                </div>
-            </div>
-        @endif
+            @endif
+        </section>
 
         {{-- Descripción --}}
-        <div class="bg-white border rounded p-4 space-y-4">
+        <section class="tarjeta space-y-3 p-4 sm:p-5">
+            <h2 class="titulo-seccion"><span class="font-mono">3</span> · Detalle</h2>
             <div>
-                <label class="block font-medium mb-1 text-slate-800">
+                <label for="descripcion" class="etiqueta">
                     {{ in_array($tipo_solicitud, ['cambio_plan', 'cambio_titular']) ? 'Motivo / observaciones' : 'Descripción del problema' }}
                 </label>
-                <textarea wire:model="descripcion" rows="4" class="w-full border rounded p-2"
+                <textarea id="descripcion" wire:model="descripcion" rows="4" class="control"
                     placeholder="Describe lo que reporta el cliente..."></textarea>
-                @error('descripcion') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
+                @error('descripcion') <p class="error-campo">{{ $message }}</p> @enderror
             </div>
 
-            <p class="text-xs text-slate-500">
-                La criticidad se calcula sola: si el servicio está caído (sin internet o sin TV)
-                el caso entra como <strong>inmediato</strong>; el resto va a cinco días hábiles.
+            <p class="flex items-start gap-2 text-xs text-tinta-3">
+                <x-inmediata class="mt-px shrink-0" />
+                <span>La criticidad se calcula sola: si el servicio está caído (sin internet o sin TV)
+                el caso entra como <strong class="text-tinta">inmediato</strong>; el resto va a cinco días hábiles.</span>
             </p>
-        </div>
+        </section>
 
         <div class="flex gap-2">
-            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded" wire:loading.attr="disabled">
-                <span wire:loading.remove wire:target="guardar">Guardar soporte</span>
-                <span wire:loading wire:target="guardar">Guardando...</span>
-            </button>
-            <a href="{{ route('soportes.index') }}" wire:navigate class="px-4 py-2 rounded border">Cancelar</a>
+            <x-boton variante="primario" type="submit" wire:loading.attr="disabled">
+                <span wire:loading.remove wire:target="guardar">Guardar caso</span>
+                <span wire:loading wire:target="guardar">Guardando…</span>
+            </x-boton>
+            <x-boton variante="fantasma" :href="route('soportes.index')" wire:navigate>Cancelar</x-boton>
         </div>
     </form>
 </div>

@@ -182,52 +182,57 @@ new #[Layout('layouts.app')] class extends Component {
     }
 }; ?>
 
-<div class="p-6">
-    @if (session('mensaje'))
-        <div class="bg-green-100 text-green-800 p-3 rounded mb-4">{{ session('mensaje') }}</div>
-    @endif
+<div class="mx-auto flex max-w-[1400px] flex-col gap-4 px-4 py-5 sm:px-6 lg:py-6">
+    <x-mensajes />
 
-    <div class="flex justify-between items-center mb-4">
-        <h1 class="text-2xl font-bold text-slate-800">Inventario</h1>
-        <button wire:click="nuevoMaterial" class="bg-blue-600 text-white px-4 py-2 rounded">+ Nuevo material</button>
-    </div>
+    <x-encabezado titulo="Inventario" subtitulo="Material de bodega para las visitas. La existencia se mueve solo con entradas y salidas.">
+        <x-slot:acciones>
+            <x-boton variante="primario" wire:click="nuevoMaterial">
+                <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>
+                Nuevo material
+            </x-boton>
+        </x-slot:acciones>
+    </x-encabezado>
 
     @if ($this->bajos > 0)
-        <div class="bg-orange-50 border border-orange-200 text-orange-900 p-3 rounded mb-4 text-sm flex justify-between items-center">
-            <span>
-                <strong>{{ $this->bajos }}</strong>
-                {{ $this->bajos === 1 ? 'material está' : 'materiales están' }} en o por debajo del stock mínimo.
+        <div class="flex flex-wrap items-center justify-between gap-2 rounded-tarjeta border border-sla-atencion/30 bg-sla-atencion-fondo px-4 py-3 text-sm text-sla-atencion">
+            <span class="flex items-center gap-2">
+                <x-sla-glifo estado="atencion" :tamano="12" />
+                <span><strong class="font-mono">{{ $this->bajos }}</strong>
+                {{ $this->bajos === 1 ? 'material está' : 'materiales están' }} en o por debajo del stock mínimo.</span>
             </span>
-            <button wire:click="$set('soloBajos', true)" class="underline">Ver solo esos</button>
+            <button type="button" wire:click="$set('soloBajos', true)" class="font-semibold underline">Ver solo esos</button>
         </div>
     @endif
 
-    <div class="bg-white border rounded p-4 mb-4 grid gap-3 md:grid-cols-4 items-end">
-        <div class="md:col-span-3">
-            <label class="block text-xs font-medium text-slate-600 mb-1">Buscar</label>
-            <input type="search" wire:model.live.debounce.400ms="buscar" class="w-full border rounded p-2 text-sm"
-                placeholder="Nombre del material">
+    <div class="tarjeta grid items-end gap-3 p-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <div>
+            <label for="buscar" class="etiqueta text-[13px]">Buscar</label>
+            <div class="relative">
+                <svg class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-tinta-3" width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="m10.5 10.5 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>
+                <input id="buscar" type="search" wire:model.live.debounce.400ms="buscar" class="control h-9 pl-8" placeholder="Nombre del material">
+            </div>
         </div>
-        <label class="flex items-center gap-2 text-sm text-slate-700">
-            <input type="checkbox" wire:model.live="soloBajos" class="rounded border-slate-300">
+        <label class="flex h-9 items-center gap-2 text-sm">
+            <input type="checkbox" wire:model.live="soloBajos" class="size-4 rounded border-linea bg-superficie text-acento focus:ring-acento-texto">
             Solo stock bajo
         </label>
     </div>
 
     {{-- Panel de material --}}
     @if ($panel === 'material')
-        <div class="bg-white border rounded p-4 mb-4 space-y-3">
-            <h2 class="font-semibold text-slate-800">{{ $material_id ? 'Editar material' : 'Nuevo material' }}</h2>
+        <section class="tarjeta space-y-3 border-acento/40 p-4">
+            <h2 class="font-semibold">{{ $material_id ? 'Editar material' : 'Nuevo material' }}</h2>
 
-            <div class="grid gap-3 md:grid-cols-4">
-                <div class="md:col-span-2">
-                    <label class="block text-xs font-medium text-slate-600 mb-1">Nombre</label>
-                    <input type="text" wire:model="nombre" class="w-full border rounded p-2 text-sm">
-                    @error('nombre') <span class="text-red-600 text-xs">{{ $message }}</span> @enderror
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <div class="sm:col-span-2">
+                    <label for="nombre" class="etiqueta">Nombre</label>
+                    <input id="nombre" type="text" wire:model="nombre" class="control h-9">
+                    @error('nombre') <p class="error-campo">{{ $message }}</p> @enderror
                 </div>
                 <div>
-                    <label class="block text-xs font-medium text-slate-600 mb-1">Categoría</label>
-                    <select wire:model="tipo" class="w-full border rounded p-2 text-sm">
+                    <label for="tipo" class="etiqueta">Categoría</label>
+                    <select id="tipo" wire:model="tipo" class="control h-9 py-0">
                         <option value="cable">Cable</option>
                         <option value="conector">Conector</option>
                         <option value="router">Router / ONU</option>
@@ -237,102 +242,103 @@ new #[Layout('layouts.app')] class extends Component {
                     </select>
                 </div>
                 <div>
-                    <label class="block text-xs font-medium text-slate-600 mb-1">Stock mínimo</label>
-                    <input type="number" min="0" wire:model="cantidad_minima" class="w-full border rounded p-2 text-sm">
-                    @error('cantidad_minima') <span class="text-red-600 text-xs">{{ $message }}</span> @enderror
+                    <label for="cantidad-minima" class="etiqueta">Stock mínimo</label>
+                    <input id="cantidad-minima" type="number" min="0" wire:model="cantidad_minima" class="control h-9 font-mono">
+                    @error('cantidad_minima') <p class="error-campo">{{ $message }}</p> @enderror
                 </div>
                 <div>
-                    <label class="block text-xs font-medium text-slate-600 mb-1">Precio unitario</label>
-                    <input type="number" step="1" wire:model="precio_unitario" class="w-full border rounded p-2 text-sm">
-                    @error('precio_unitario') <span class="text-red-600 text-xs">{{ $message }}</span> @enderror
+                    <label for="precio" class="etiqueta">Precio unitario</label>
+                    <input id="precio" type="number" step="1" wire:model="precio_unitario" class="control h-9 font-mono">
+                    @error('precio_unitario') <p class="error-campo">{{ $message }}</p> @enderror
                 </div>
             </div>
 
-            <p class="text-xs text-slate-500">
+            <p class="text-xs text-tinta-3">
                 La existencia no se edita aquí: entra y sale por movimientos, para que el kardex siempre cuadre.
             </p>
 
             <div class="flex gap-2">
-                <button wire:click="guardarMaterial" class="bg-blue-600 text-white px-4 py-2 rounded text-sm">Guardar</button>
-                <button wire:click="$set('panel', '')" class="px-4 py-2 rounded border text-sm">Cancelar</button>
+                <x-boton variante="primario" wire:click="guardarMaterial">Guardar</x-boton>
+                <x-boton variante="fantasma" wire:click="$set('panel', '')">Cancelar</x-boton>
             </div>
-        </div>
+        </section>
     @endif
 
     {{-- Panel de movimiento --}}
     @if ($panel === 'movimiento')
-        <div class="bg-white border rounded p-4 mb-4 space-y-3">
-            <h2 class="font-semibold text-slate-800">Registrar movimiento</h2>
+        <section class="tarjeta space-y-3 border-acento/40 p-4">
+            <h2 class="font-semibold">Registrar movimiento</h2>
 
-            <div class="grid gap-3 md:grid-cols-3">
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:max-w-2xl">
                 <div>
-                    <label class="block text-xs font-medium text-slate-600 mb-1">Tipo</label>
-                    <select wire:model="movimiento_tipo" class="w-full border rounded p-2 text-sm">
+                    <label for="movimiento-tipo" class="etiqueta">Tipo</label>
+                    <select id="movimiento-tipo" wire:model="movimiento_tipo" class="control h-9 py-0">
                         <option value="entrada">Entrada (compra o devolución a bodega)</option>
                         <option value="salida">Salida (baja o pérdida)</option>
                     </select>
                 </div>
                 <div>
-                    <label class="block text-xs font-medium text-slate-600 mb-1">Cantidad</label>
-                    <input type="number" min="1" wire:model="movimiento_cantidad" class="w-full border rounded p-2 text-sm">
-                    @error('movimiento_cantidad') <span class="text-red-600 text-xs">{{ $message }}</span> @enderror
+                    <label for="movimiento-cantidad" class="etiqueta">Cantidad</label>
+                    <input id="movimiento-cantidad" type="number" min="1" wire:model="movimiento_cantidad" class="control h-9 font-mono">
+                    @error('movimiento_cantidad') <p class="error-campo">{{ $message }}</p> @enderror
                 </div>
             </div>
 
             <div class="flex gap-2">
-                <button wire:click="guardarMovimiento" class="bg-blue-600 text-white px-4 py-2 rounded text-sm">Registrar</button>
-                <button wire:click="$set('panel', '')" class="px-4 py-2 rounded border text-sm">Cancelar</button>
+                <x-boton variante="primario" wire:click="guardarMovimiento">Registrar</x-boton>
+                <x-boton variante="fantasma" wire:click="$set('panel', '')">Cancelar</x-boton>
             </div>
-        </div>
+        </section>
     @endif
 
-    <div class="overflow-x-auto bg-white border rounded shadow-sm">
-        <table class="w-full text-sm">
-            <thead class="bg-slate-700 text-white">
-                <tr>
-                    <th class="p-2 text-left font-semibold">Material</th>
-                    <th class="p-2 text-left font-semibold">Categoría</th>
-                    <th class="p-2 text-right font-semibold">Existencia</th>
-                    <th class="p-2 text-right font-semibold">Mínimo</th>
-                    <th class="p-2 text-right font-semibold">Precio</th>
-                    <th class="p-2 text-right font-semibold">Acciones</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-200">
-                @forelse ($materiales as $material)
-                    @php $bajo = $material->cantidad_total <= $material->cantidad_minima; @endphp
-                    <tr class="hover:bg-slate-50">
-                        <td class="p-2">
-                            <a href="{{ route('inventario.show', $material) }}" wire:navigate class="text-slate-800 hover:text-blue-600">
-                                {{ $material->nombre }}
-                            </a>
-                        </td>
-                        <td class="p-2 text-slate-600 text-xs">{{ ucfirst($material->tipo ?? '—') }}</td>
-                        <td class="p-2 text-right">
-                            <span @class(['font-semibold', 'text-orange-700' => $bajo])>
+    <x-tabla minimo="760px">
+        <thead>
+            <tr>
+                <th>Material</th>
+                <th>Categoría</th>
+                <th class="text-right">Existencia</th>
+                <th class="text-right">Mínimo</th>
+                <th class="text-right">Precio</th>
+                <th class="text-right"><span class="sr-only">Acciones</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            @forelse ($materiales as $material)
+                @php $bajo = $material->cantidad_total <= $material->cantidad_minima; @endphp
+                <tr wire:key="material-{{ $material->id }}">
+                    <td>
+                        <a href="{{ route('inventario.show', $material) }}" wire:navigate class="font-medium text-tinta no-underline hover:text-acento-texto hover:underline">
+                            {{ $material->nombre }}
+                        </a>
+                    </td>
+                    <td class="text-tinta-2">{{ ucfirst($material->tipo ?? '—') }}</td>
+                    <td class="text-right">
+                        @if ($bajo)
+                            <span class="inline-flex items-center gap-1.5 rounded bg-sla-atencion-fondo px-1.5 font-mono font-semibold text-sla-atencion" title="Stock bajo">
+                                <x-sla-glifo estado="atencion" :tamano="10" />
                                 {{ number_format($material->cantidad_total) }}
                             </span>
-                            @if ($bajo)
-                                <span class="block text-[10px] text-orange-700">stock bajo</span>
-                            @endif
-                        </td>
-                        <td class="p-2 text-right text-slate-600">{{ number_format($material->cantidad_minima) }}</td>
-                        <td class="p-2 text-right text-slate-600">
-                            {{ $material->precio_unitario ? '$'.number_format($material->precio_unitario, 0, ',', '.') : '—' }}
-                        </td>
-                        <td class="p-2 text-right whitespace-nowrap">
-                            <button wire:click="moverStock({{ $material->id }})" class="text-xs text-blue-600">Movimiento</button>
-                            <button wire:click="editarMaterial({{ $material->id }})" class="ml-3 text-xs text-blue-600">Editar</button>
-                        </td>
-                    </tr>
-                @empty
-                    <tr>
-                        <td colspan="6" class="p-6 text-center text-slate-500">No hay materiales registrados.</td>
-                    </tr>
-                @endforelse
-            </tbody>
-        </table>
-    </div>
+                            <span class="sr-only">stock bajo</span>
+                        @else
+                            <span class="font-mono font-semibold">{{ number_format($material->cantidad_total) }}</span>
+                        @endif
+                    </td>
+                    <td class="text-right font-mono text-tinta-2">{{ number_format($material->cantidad_minima) }}</td>
+                    <td class="text-right font-mono text-tinta-2">
+                        {{ $material->precio_unitario ? '$'.number_format($material->precio_unitario, 0, ',', '.') : '—' }}
+                    </td>
+                    <td class="whitespace-nowrap text-right">
+                        <x-boton tamano="chico" wire:click="moverStock({{ $material->id }})">Movimiento</x-boton>
+                        <x-boton variante="fantasma" tamano="chico" wire:click="editarMaterial({{ $material->id }})">Editar</x-boton>
+                    </td>
+                </tr>
+            @empty
+                <tr>
+                    <td colspan="6" class="!h-24 text-center text-tinta-3">No hay materiales registrados.</td>
+                </tr>
+            @endforelse
+        </tbody>
+    </x-tabla>
 
-    <div class="mt-4">{{ $materiales->links() }}</div>
+    <div>{{ $materiales->links() }}</div>
 </div>

@@ -139,62 +139,72 @@ new #[Layout('layouts.app')] class extends Component {
     }
 }; ?>
 
-<div class="p-6">
-    @if (session('mensaje'))
-        <div class="bg-green-100 text-green-800 p-3 rounded mb-4">{{ session('mensaje') }}</div>
-    @endif
+<div class="mx-auto flex max-w-[1400px] flex-col gap-4 px-4 py-5 sm:px-6 lg:py-6">
+    <x-mensajes />
 
-    <div class="flex justify-between items-center mb-4">
-        <h1 class="text-2xl font-bold text-slate-800">Bandeja de soportes</h1>
-        <div class="flex gap-2">
-            <button wire:click="exportar" class="px-4 py-2 rounded border text-sm" wire:loading.attr="disabled">
+    <x-encabezado titulo="Bandeja de casos" subtitulo="Los abiertos se ordenan por lo que vence primero.">
+        <x-slot:acciones>
+            <x-boton wire:click="exportar" wire:loading.attr="disabled">
+                <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8m0 0 3-3m-3 3L5 7M2.5 11v2.5h11V11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
                 <span wire:loading.remove wire:target="exportar">Exportar CSV</span>
-                <span wire:loading wire:target="exportar">Generando...</span>
-            </button>
-            <a href="{{ route('soportes.create') }}" wire:navigate class="bg-blue-600 text-white px-4 py-2 rounded">
-                + Nuevo soporte
-            </a>
-        </div>
-    </div>
+                <span wire:loading wire:target="exportar">Generando…</span>
+            </x-boton>
+            <x-boton variante="primario" :href="route('soportes.create')" wire:navigate>
+                <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>
+                Nuevo caso
+            </x-boton>
+        </x-slot:acciones>
+    </x-encabezado>
 
     {{-- Vistas rápidas --}}
-    <div class="flex flex-wrap gap-2 mb-4">
-        @php
-            $vistas = [
-                '' => ['Todos', null],
-                'mios' => ['Míos', $conteos['mios']],
-                'abiertos' => ['Abiertos', $conteos['abiertos']],
-                'inmediatos' => ['Inmediatos', $conteos['inmediatos']],
-                'vencidos' => ['Vencidos', $conteos['vencidos']],
-            ];
-        @endphp
-
-        @foreach ($vistas as $clave => [$etiqueta, $conteo])
-            <button wire:click="$set('vista', '{{ $clave }}')" @class([
-                'px-3 py-1.5 rounded text-sm border',
-                'bg-slate-800 text-white border-slate-800' => $vista === $clave,
-                'bg-white text-slate-700 hover:bg-slate-50' => $vista !== $clave,
-                'border-red-300 text-red-700' => $vista !== $clave && $clave === 'vencidos' && $conteo > 0,
-            ])>
-                {{ $etiqueta }}
-                @if ($conteo !== null)
-                    <span class="ml-1 opacity-70">{{ $conteo }}</span>
-                @endif
-            </button>
-        @endforeach
+    @php
+        $vistas = [
+            '' => ['Todos', null],
+            'mios' => ['Míos', $conteos['mios']],
+            'abiertos' => ['Abiertos', $conteos['abiertos']],
+            'inmediatos' => ['Inmediatos', $conteos['inmediatos']],
+            'vencidos' => ['Vencidos', $conteos['vencidos']],
+        ];
+    @endphp
+    <div class="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+        <div class="inline-flex gap-1 rounded-tarjeta border border-linea bg-superficie p-1" role="tablist" aria-label="Vistas de la bandeja">
+            @foreach ($vistas as $clave => [$etiqueta, $conteo])
+                <button type="button" role="tab" wire:click="$set('vista', '{{ $clave }}')" aria-selected="{{ $vista === $clave ? 'true' : 'false' }}"
+                    @class([
+                        'inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-control px-3 text-[13px] font-medium transition-colors',
+                        'bg-menu text-white dark:bg-elevada dark:text-tinta' => $vista === $clave,
+                        'text-tinta-2 hover:bg-elevada' => $vista !== $clave,
+                    ])>
+                    @if ($clave === 'vencidos')
+                        <x-sla-glifo estado="vencido" :tamano="11" />
+                    @endif
+                    {{ $etiqueta }}
+                    @if ($conteo !== null)
+                        <span @class([
+                            'font-mono text-xs',
+                            'rounded-[3px] bg-sla-vencido px-1 font-semibold text-white' => $clave === 'vencidos' && $conteo > 0,
+                            'opacity-70' => ! ($clave === 'vencidos' && $conteo > 0),
+                        ])>{{ $conteo }}</span>
+                    @endif
+                </button>
+            @endforeach
+        </div>
     </div>
 
     {{-- Filtros --}}
-    <div class="bg-white border rounded p-4 mb-4 grid gap-3 md:grid-cols-5">
-        <div class="md:col-span-2">
-            <label class="block text-xs font-medium text-slate-600 mb-1">Buscar</label>
-            <input type="search" wire:model.live.debounce.400ms="buscar" class="w-full border rounded p-2 text-sm"
-                placeholder="N° soporte, cliente, cédula o abonado">
+    <div class="tarjeta grid grid-cols-2 gap-3 p-3 lg:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))]">
+        <div class="col-span-2 lg:col-span-1">
+            <label for="buscar" class="etiqueta text-[13px]">Buscar</label>
+            <div class="relative">
+                <svg class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-tinta-3" width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="m10.5 10.5 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>
+                <input id="buscar" type="search" wire:model.live.debounce.400ms="buscar" class="control h-9 pl-8"
+                    placeholder="N° de caso, cliente, cédula o abonado">
+            </div>
         </div>
 
         <div>
-            <label class="block text-xs font-medium text-slate-600 mb-1">Estado</label>
-            <select wire:model.live="estado" class="w-full border rounded p-2 text-sm">
+            <label for="f-estado" class="etiqueta text-[13px]">Estado</label>
+            <select id="f-estado" wire:model.live="estado" class="control h-9 py-0">
                 <option value="">Todos</option>
                 @foreach (\App\Models\Soporte::ESTADOS as $valor => $etiqueta)
                     <option value="{{ $valor }}">{{ $etiqueta }}</option>
@@ -203,8 +213,8 @@ new #[Layout('layouts.app')] class extends Component {
         </div>
 
         <div>
-            <label class="block text-xs font-medium text-slate-600 mb-1">Tipo</label>
-            <select wire:model.live="tipo" class="w-full border rounded p-2 text-sm">
+            <label for="f-tipo" class="etiqueta text-[13px]">Tipo</label>
+            <select id="f-tipo" wire:model.live="tipo" class="control h-9 py-0">
                 <option value="">Todos</option>
                 @foreach (\App\Models\Soporte::TIPOS_SOLICITUD as $valor => $etiqueta)
                     <option value="{{ $valor }}">{{ $etiqueta }}</option>
@@ -213,8 +223,8 @@ new #[Layout('layouts.app')] class extends Component {
         </div>
 
         <div>
-            <label class="block text-xs font-medium text-slate-600 mb-1">Canal</label>
-            <select wire:model.live="canal" class="w-full border rounded p-2 text-sm">
+            <label for="f-canal" class="etiqueta text-[13px]">Canal</label>
+            <select id="f-canal" wire:model.live="canal" class="control h-9 py-0">
                 <option value="">Todos</option>
                 @foreach (\App\Models\Soporte::CANALES as $valor => $etiqueta)
                     <option value="{{ $valor }}">{{ $etiqueta }}</option>
@@ -222,117 +232,118 @@ new #[Layout('layouts.app')] class extends Component {
             </select>
         </div>
 
-        <div class="md:col-span-2">
-            <label class="block text-xs font-medium text-slate-600 mb-1">Responsable</label>
-            <select wire:model.live="responsable" class="w-full border rounded p-2 text-sm">
+        <div>
+            <label for="f-responsable" class="etiqueta text-[13px]">Responsable</label>
+            <select id="f-responsable" wire:model.live="responsable" class="control h-9 py-0">
                 <option value="">Todos</option>
                 @foreach ($responsables as $r)
                     <option value="{{ $r->id }}">{{ $r->name }}</option>
                 @endforeach
             </select>
         </div>
-
-        <div class="md:col-span-3 flex items-center gap-4">
-            <button wire:click="limpiarFiltros" class="text-sm text-blue-600">Limpiar filtros</button>
-            <span class="text-sm text-slate-500 ml-auto">{{ $soportes->total() }} caso(s)</span>
-        </div>
     </div>
 
-    <div class="overflow-x-auto bg-white border rounded shadow-sm">
-        <table class="w-full text-sm">
-            <thead class="bg-slate-700 text-white">
-                <tr>
-                    <th class="p-2 text-left font-semibold">N°</th>
-                    <th class="p-2 text-left font-semibold">Cliente</th>
-                    <th class="p-2 text-left font-semibold">Tipo</th>
-                    <th class="p-2 text-left font-semibold">Canal</th>
-                    <th class="p-2 text-left font-semibold">Estado</th>
-                    <th class="p-2 text-left font-semibold">SLA</th>
-                    <th class="p-2 text-left font-semibold">Responsable</th>
-                    <th class="p-2 text-left font-semibold">Ingreso</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-200">
-                @forelse ($soportes as $soporte)
-                    @php $semaforo = $soporte->semaforoSla(); @endphp
-                    <tr class="hover:bg-slate-50 cursor-pointer"
-                        onclick="window.location='{{ route('soportes.show', $soporte) }}'">
-                        <td class="p-2 font-mono text-xs text-slate-600">
-                            {{ $soporte->numero_soporte ?? $soporte->id }}
+    <div class="flex items-center justify-between gap-3 text-[13px]">
+        <span class="text-tinta-3"><span class="font-mono text-tinta">{{ $soportes->total() }}</span> {{ $soportes->total() === 1 ? 'caso' : 'casos' }}</span>
+        <x-boton variante="fantasma" tamano="chico" wire:click="limpiarFiltros">Limpiar filtros</x-boton>
+    </div>
+
+    {{-- Escritorio: tabla densa. --}}
+    <x-tabla minimo="980px" class="hidden md:block">
+        <thead>
+            <tr>
+                <th class="w-[160px]">Caso</th>
+                <th>Cliente</th>
+                <th>Estado</th>
+                <th class="w-[170px]">SLA</th>
+                <th>Tipo · canal</th>
+                <th>Responsable</th>
+                <th class="text-right">Ingreso</th>
+            </tr>
+        </thead>
+        <tbody>
+            @forelse ($soportes as $soporte)
+                <tr wire:key="fila-{{ $soporte->id }}" class="cursor-pointer"
+                    onclick="window.location='{{ route('soportes.show', $soporte) }}'">
+                    <td>
+                        <div class="flex flex-col items-start gap-0.5">
+                            <a href="{{ route('soportes.show', $soporte) }}" class="whitespace-nowrap font-mono font-medium text-tinta no-underline hover:text-acento-texto hover:underline">
+                                {{ $soporte->numero_soporte ?? $soporte->id }}
+                            </a>
                             @if ($soporte->esInmediato())
-                                <span class="block mt-0.5 text-[10px] font-sans font-semibold text-red-700">INMEDIATO</span>
+                                <x-inmediata />
                             @endif
-                        </td>
-                        <td class="p-2">
-                            {{ $soporte->cliente->nombre ?? '—' }}
-                            @if ($soporte->cliente?->codigo_abonado)
-                                <span class="block text-xs text-slate-500">{{ $soporte->cliente->codigo_abonado }}</span>
-                            @endif
+                        </div>
+                    </td>
+                    <td class="max-w-[260px]">
+                        <div class="flex items-center gap-2">
+                            <span class="truncate font-medium">{{ $soporte->cliente->nombre ?? '—' }}</span>
                             @if (($soporte->cliente->soportes_count ?? 0) >= $minimoRecurrencia)
-                                <span class="inline-block mt-1 px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 text-[10px] font-semibold">
-                                    Recurrente · {{ $soporte->cliente->soportes_count }}
+                                <span class="shrink-0 rounded-[3px] bg-recurrente-fondo px-1.5 text-[11px] font-semibold leading-[18px] text-recurrente" title="Cliente recurrente: casos registrados">
+                                    ↻ {{ $soporte->cliente->soportes_count }}
                                 </span>
                             @endif
-                        </td>
-                        <td class="p-2 text-slate-600">{{ $soporte->etiquetaTipo() }}</td>
-                        <td class="p-2 text-slate-600 text-xs">{{ $soporte->etiquetaCanal() }}</td>
-                        <td class="p-2">
-                            <span @class([
-                                'px-2 py-1 rounded text-xs whitespace-nowrap',
-                                'bg-yellow-200 text-yellow-900' => $soporte->estado === 'pendiente',
-                                'bg-blue-200 text-blue-900' => $soporte->estado === 'en_proceso',
-                                'bg-cyan-200 text-cyan-900' => $soporte->estado === 'seguimiento',
-                                'bg-purple-200 text-purple-900' => $soporte->estado === 'enviado_tecnico',
-                                'bg-slate-800 text-white' => $soporte->estado === 'escalado_n3',
-                                'bg-orange-200 text-orange-900' => $soporte->estado === 'sin_contacto',
-                                'bg-green-200 text-green-900' => $soporte->estado === 'solucionado',
-                                'bg-red-200 text-red-900' => $soporte->estado === 'cancelado',
-                                'bg-slate-200 text-slate-700' => $soporte->estado === 'cerrado_sin_contacto',
-                            ])>{{ $soporte->etiquetaEstado() }}</span>
-                        </td>
-                        <td class="p-2 whitespace-nowrap">
-                            @if ($soporte->estaCerrado())
-                                <span class="text-xs text-slate-400">—</span>
-                            @else
-                                <span class="inline-flex items-center gap-1.5">
-                                    <span @class([
-                                        'inline-block w-2 h-2 rounded-full',
-                                        'bg-green-500' => $semaforo === 'ok',
-                                        'bg-yellow-500' => $semaforo === 'atencion',
-                                        'bg-orange-500' => $semaforo === 'riesgo',
-                                        'bg-red-600' => $semaforo === 'vencido',
-                                        'bg-slate-400' => $semaforo === 'pausado',
-                                    ])></span>
-                                    <span @class([
-                                        'text-xs',
-                                        'text-red-700 font-semibold' => $semaforo === 'vencido',
-                                        'text-slate-500' => $semaforo === 'pausado',
-                                        'text-slate-700' => !in_array($semaforo, ['vencido', 'pausado']),
-                                    ])>
-                                        {{ $semaforo === 'pausado' ? 'en pausa' : $soporte->restanteLegible() }}
-                                    </span>
-                                </span>
-                            @endif
-                        </td>
-                        <td class="p-2 text-slate-600">{{ $soporte->tecnicoSoporte->name ?? 'Sin asignar' }}</td>
-                        <td class="p-2 text-slate-500 text-xs whitespace-nowrap">
-                            {{ $soporte->created_at->format('d/m/Y H:i') }}
-                        </td>
-                    </tr>
-                @empty
-                    <tr>
-                        <td colspan="8" class="p-6 text-center text-slate-500">
-                            No hay casos que coincidan con los filtros.
-                        </td>
-                    </tr>
-                @endforelse
-            </tbody>
-        </table>
-    </div>
+                        </div>
+                        @if ($soporte->cliente?->codigo_abonado)
+                            <span class="block font-mono text-xs text-tinta-3">{{ $soporte->cliente->codigo_abonado }}</span>
+                        @endif
+                    </td>
+                    <td><x-estado :estado="$soporte->estado" :etiqueta="$soporte->etiquetaEstado()" /></td>
+                    <td><x-sla :soporte="$soporte" /></td>
+                    <td class="text-tinta-2">
+                        {{ $soporte->etiquetaTipo() }}
+                        <span class="block text-xs text-tinta-3">{{ $soporte->etiquetaCanal() }}</span>
+                    </td>
+                    <td @class(['text-tinta-2' => $soporte->tecnicoSoporte, 'italic text-tinta-3' => ! $soporte->tecnicoSoporte])>{{ $soporte->tecnicoSoporte->name ?? 'Sin asignar' }}</td>
+                    <td class="whitespace-nowrap text-right font-mono text-xs text-tinta-3">
+                        {{ $soporte->created_at->format('d/m/Y') }}
+                        <span class="block">{{ $soporte->created_at->format('H:i') }}</span>
+                    </td>
+                </tr>
+            @empty
+                <tr>
+                    <td colspan="7" class="!h-24 text-center text-tinta-3">No hay casos que coincidan con los filtros.</td>
+                </tr>
+            @endforelse
+        </tbody>
+    </x-tabla>
 
-    <div class="mt-4">{{ $soportes->links() }}</div>
+    {{-- Celular: una tarjeta por caso, con el semáforo arriba. --}}
+    <ul class="flex flex-col gap-2 md:hidden">
+        @forelse ($soportes as $soporte)
+            <li wire:key="tarjeta-{{ $soporte->id }}">
+                <a href="{{ route('soportes.show', $soporte) }}" @class([
+                    'tarjeta block p-3 text-tinta no-underline transition-colors hover:bg-elevada',
+                    'border-l-[3px] border-l-sla-vencido' => ! $soporte->estaCerrado() && $soporte->semaforoSla() === 'vencido',
+                ])>
+                    <div class="flex items-start justify-between gap-2">
+                        <x-sla :soporte="$soporte" />
+                        <span class="font-mono text-xs text-tinta-3">{{ $soporte->numero_soporte ?? $soporte->id }}</span>
+                    </div>
+                    <p class="mt-2 flex items-center gap-2 text-[15px] font-semibold">
+                        <span class="truncate">{{ $soporte->cliente->nombre ?? '—' }}</span>
+                        @if ($soporte->esInmediato())
+                            <x-inmediata class="shrink-0" />
+                        @endif
+                    </p>
+                    <p class="text-[13px] text-tinta-3">
+                        {{ $soporte->etiquetaTipo() }} · {{ $soporte->tecnicoSoporte->name ?? 'Sin asignar' }}
+                        @if (($soporte->cliente->soportes_count ?? 0) >= $minimoRecurrencia)
+                            · <span class="font-semibold text-recurrente">↻ {{ $soporte->cliente->soportes_count }} casos</span>
+                        @endif
+                    </p>
+                    <div class="mt-2"><x-estado :estado="$soporte->estado" :etiqueta="$soporte->etiquetaEstado()" /></div>
+                </a>
+            </li>
+        @empty
+            <li class="tarjeta p-6 text-center text-sm text-tinta-3">No hay casos que coincidan con los filtros.</li>
+        @endforelse
+    </ul>
 
-    <p class="mt-3 text-xs text-slate-500">
+    <div>{{ $soportes->links() }}</div>
+
+    <p class="flex items-start gap-2 text-xs text-tinta-3">
+        <svg class="mt-px shrink-0" width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.4"></circle><path d="M8 4.8V8l2.2 1.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg>
         El reloj de SLA corre solo en horario hábil y se detiene cuando el caso está esperando
         una visita programada, la respuesta de redes o que el cliente conteste.
     </p>

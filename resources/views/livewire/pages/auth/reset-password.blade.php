@@ -96,8 +96,8 @@ new #[Layout('layouts.guest')] class extends Component
             <x-input-error :messages="$errors->get('password_confirmation')" class="mt-2" />
         </div>
 
-        <div class="flex items-center justify-end mt-4">
-            <x-primary-button>
+        <div class="mt-5">
+            <x-primary-button class="min-h-10 w-full !h-auto !whitespace-normal py-2">
                 {{ __('Reset Password') }}
             </x-primary-button>
         </div>

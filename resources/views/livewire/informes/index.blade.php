@@ -113,72 +113,67 @@ new #[Layout('layouts.app')] class extends Component {
     }
 }; ?>
 
-<div class="p-6">
-    <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
-        <div>
-            <h1 class="text-2xl font-bold text-slate-800">Informes de rendimiento</h1>
-            <p class="text-sm text-slate-500 mt-1">
-                Un informe por técnico y por mes, con las cifras del período y un espacio de
-                observaciones para la retroalimentación.
-            </p>
-        </div>
-
-        <div class="flex gap-2">
-            <select wire:model.live="mes" class="border rounded p-2 text-sm">
+<div class="mx-auto flex max-w-[1100px] flex-col gap-4 px-4 py-5 sm:px-6 lg:py-6">
+    <x-encabezado titulo="Informes de rendimiento"
+        subtitulo="Un informe por técnico y por mes, con las cifras del período y un espacio de observaciones para la retroalimentación.">
+        <x-slot:acciones>
+            <label for="mes" class="sr-only">Mes</label>
+            <select id="mes" wire:model.live="mes" class="control h-9 w-auto py-0 pr-9">
                 @foreach (\App\Models\InformeMensual::MESES as $numero => $nombre)
                     <option value="{{ $numero }}">{{ $nombre }}</option>
                 @endforeach
             </select>
-            <select wire:model.live="anio" class="border rounded p-2 text-sm">
+            <label for="anio" class="sr-only">Año</label>
+            <select id="anio" wire:model.live="anio" class="control h-9 w-auto py-0 pr-9 font-mono">
                 @foreach ($this->anios as $a)
                     <option value="{{ $a }}">{{ $a }}</option>
                 @endforeach
             </select>
-        </div>
-    </div>
+        </x-slot:acciones>
+    </x-encabezado>
 
-    <div class="overflow-x-auto bg-white border rounded shadow-sm">
-        <table class="w-full text-sm">
-            <thead class="bg-slate-700 text-white">
-                <tr>
-                    <th class="p-2 text-left font-semibold">Técnico</th>
-                    <th class="p-2 text-right font-semibold">Casos del mes</th>
-                    <th class="p-2 text-right font-semibold">Resueltos</th>
-                    <th class="p-2 text-left font-semibold">Informe</th>
-                    <th class="p-2 text-right font-semibold"></th>
+    <x-tabla minimo="620px">
+        <thead>
+            <tr>
+                <th>Técnico</th>
+                <th class="text-right">Casos del mes</th>
+                <th class="text-right">Resueltos</th>
+                <th>Informe</th>
+                <th class="text-right"><span class="sr-only">Acción</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            @forelse ($this->filas as $fila)
+                <tr wire:key="tecnico-{{ $fila->tecnico->id }}">
+                    <td class="font-medium">{{ $fila->tecnico->name }}</td>
+                    <td class="text-right font-mono font-medium">{{ $fila->total }}</td>
+                    <td class="text-right font-mono text-tinta-2">{{ $fila->resueltos }}</td>
+                    <td>
+                        @if ($fila->informe?->estaPublicado())
+                            <span class="inline-flex h-[22px] items-center gap-1.5 rounded-full border border-linea bg-elevada px-2 text-xs font-medium text-sla-ok">
+                                <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 5.2 4 7.6 8.6 2.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                                Publicado <span class="font-mono">{{ $fila->informe->publicado_at->format('d/m/Y') }}</span>
+                            </span>
+                        @elseif ($fila->informe)
+                            <span class="inline-flex h-[22px] items-center gap-1.5 rounded-full border border-dashed border-tinta-3 px-2 text-xs font-medium text-tinta-2">
+                                <svg width="10" height="10" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2.5l3 3L6 13H3v-3l7.5-7.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg>
+                                Borrador
+                            </span>
+                        @else
+                            <span class="text-xs text-tinta-3">Sin generar</span>
+                        @endif
+                    </td>
+                    <td class="text-right">
+                        <x-boton tamano="chico" :variante="$fila->informe ? 'secundario' : 'fantasma'" wire:click="abrir({{ $fila->tecnico->id }})">
+                            {{ $fila->informe ? 'Abrir' : 'Generar' }}
+                        </x-boton>
+                    </td>
                 </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-200">
-                @forelse ($this->filas as $fila)
-                    <tr class="hover:bg-slate-50">
-                        <td class="p-2">{{ $fila->tecnico->name }}</td>
-                        <td class="p-2 text-right font-medium">{{ $fila->total }}</td>
-                        <td class="p-2 text-right text-slate-600">{{ $fila->resueltos }}</td>
-                        <td class="p-2">
-                            @if ($fila->informe?->estaPublicado())
-                                <span class="px-2 py-1 rounded bg-green-200 text-green-900 text-xs">
-                                    Publicado {{ $fila->informe->publicado_at->format('d/m/Y') }}
-                                </span>
-                            @elseif ($fila->informe)
-                                <span class="px-2 py-1 rounded bg-yellow-200 text-yellow-900 text-xs">Borrador</span>
-                            @else
-                                <span class="text-slate-400 text-xs">Sin generar</span>
-                            @endif
-                        </td>
-                        <td class="p-2 text-right">
-                            <button wire:click="abrir({{ $fila->tecnico->id }})" class="text-blue-600 text-xs">
-                                {{ $fila->informe ? 'Abrir' : 'Generar' }}
-                            </button>
-                        </td>
-                    </tr>
-                @empty
-                    <tr>
-                        <td colspan="5" class="p-6 text-center text-slate-500">
-                            No hay técnicos de soporte registrados.
-                        </td>
-                    </tr>
-                @endforelse
-            </tbody>
-        </table>
-    </div>
+            @empty
+                <tr>
+                    <td colspan="5" class="!h-24 text-center text-tinta-3">No hay técnicos de soporte registrados.</td>
+                </tr>
+            @endforelse
+        </tbody>
+    </x-tabla>
 </div>

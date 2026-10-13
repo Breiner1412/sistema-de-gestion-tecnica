@@ -3,231 +3,217 @@
 
 {{-- Responsable --}}
 @unless ($soporte->estaCerrado())
-    <div class="bg-white border rounded p-4 mb-4">
-        <label class="block font-medium mb-1 text-slate-800">Técnico de soporte (nivel 2)</label>
+    <section class="tarjeta p-4">
+        <label for="tecnico-soporte" class="titulo-seccion mb-2 block">Técnico de soporte (nivel 2)</label>
 
         @if ($this->puedeReasignar)
             <div class="flex gap-2">
-                <select wire:model="tecnico_soporte_id" class="w-full border rounded p-2">
+                <select id="tecnico-soporte" wire:model="tecnico_soporte_id" class="control h-9 min-w-0 flex-1 py-0">
                     <option value="">— Sin asignar —</option>
                     @foreach ($this->tecnicosSoporte as $t)
                         <option value="{{ $t->id }}">{{ $t->name }}</option>
                     @endforeach
                 </select>
-                <button wire:click="asignar" class="bg-blue-600 text-white px-4 py-2 rounded whitespace-nowrap">
-                    Asignar
-                </button>
+                <x-boton wire:click="asignar">Asignar</x-boton>
             </div>
-            @error('tecnico_soporte_id') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
+            @error('tecnico_soporte_id') <p class="error-campo">{{ $message }}</p> @enderror
         @else
-            <p class="text-slate-700">{{ $soporte->tecnicoSoporte->name ?? 'Sin asignar' }}</p>
+            <p @class(['text-sm', 'italic text-tinta-3' => ! $soporte->tecnicoSoporte])>{{ $soporte->tecnicoSoporte->name ?? 'Sin asignar' }}</p>
             @if ($this->ordenAbierta)
-                <p class="text-xs text-slate-500 mt-1">Hay una visita en curso. Solo un administrador puede reasignar.</p>
+                <p class="mt-1 text-xs text-tinta-3">Hay una visita en curso. Solo un administrador puede reasignar.</p>
             @endif
         @endif
-    </div>
+    </section>
 @endunless
 
 {{-- Acciones --}}
 @unless ($soporte->estaCerrado())
-    <div class="bg-white border rounded p-4 mb-4 space-y-3">
-        <h2 class="font-semibold text-slate-800">Acciones</h2>
+    <section class="tarjeta p-4">
+        <h2 class="titulo-seccion mb-3">Acciones</h2>
 
-        <div class="flex flex-wrap gap-2">
+        <div class="flex flex-col gap-2">
             @if ($soporte->estado === 'escalado_n3')
                 @if ($this->esResponsableN3)
-                    <button wire:click="$set('panel', 'redes')" class="bg-slate-800 text-white px-4 py-2 rounded">
+                    <x-boton variante="primario" wire:click="$set('panel', 'redes')" class="w-full">
                         Responder y devolver al nivel 2
-                    </button>
+                    </x-boton>
                 @else
-                    <p class="text-sm text-slate-500">
+                    <p class="text-sm text-tinta-3">
                         El caso está en manos de {{ $soporte->escaladoA->name ?? 'ingeniería de redes' }}.
                     </p>
                 @endif
             @endif
 
             @if ($this->puedeTrabajar && $soporte->puedeTransicionarA('solucionado') && !$this->ordenAbierta)
-                <button wire:click="$set('panel', 'cerrar')" class="bg-green-600 text-white px-4 py-2 rounded">
+                <x-boton variante="primario" wire:click="$set('panel', 'cerrar')" class="w-full">
+                    <svg width="14" height="14" viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 5.2 4 7.6 8.6 2.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
                     Resolver
-                </button>
+                </x-boton>
             @endif
 
             @if ($this->ordenAbierta)
-                <a href="{{ route('ordenes.show', $this->ordenAbierta) }}" wire:navigate
-                    class="bg-slate-700 text-white px-4 py-2 rounded">
+                <x-boton :href="route('ordenes.show', $this->ordenAbierta)" wire:navigate class="w-full">
                     Ver visita #{{ $this->ordenAbierta->id }}
                     @if ($this->ordenAbierta->fecha_programada)
-                        ({{ $this->ordenAbierta->fecha_programada->format('d/m') }})
+                        <span class="font-mono font-normal text-tinta-3">{{ $this->ordenAbierta->fecha_programada->format('d/m') }}</span>
                     @endif
-                </a>
-            @elseif ($this->puedeTrabajar && $soporte->puedeTransicionarA('enviado_tecnico'))
-                <button wire:click="$set('panel', 'visita')" class="bg-indigo-600 text-white px-4 py-2 rounded">
-                    Programar visita
-                </button>
+                </x-boton>
             @endif
 
-            @if ($this->puedeTrabajar && $soporte->puedeTransicionarA('escalado_n3'))
-                <button wire:click="$set('panel', 'escalar')" class="bg-slate-800 text-white px-4 py-2 rounded">
-                    Escalar a redes
-                </button>
-            @endif
+            <div class="grid grid-cols-2 gap-2">
+                @if (! $this->ordenAbierta && $this->puedeTrabajar && $soporte->puedeTransicionarA('enviado_tecnico'))
+                    <x-boton wire:click="$set('panel', 'visita')">Programar visita</x-boton>
+                @endif
 
-            @if ($this->puedeTrabajar && $soporte->puedeTransicionarA('sin_contacto'))
-                <button wire:click="sinContacto"
-                    wire:confirm="¿Registrar un intento de contacto sin respuesta?"
-                    class="bg-orange-500 text-white px-4 py-2 rounded">
-                    No contesta
-                </button>
-            @endif
+                @if ($this->puedeTrabajar && $soporte->puedeTransicionarA('escalado_n3'))
+                    <x-boton wire:click="$set('panel', 'escalar')">Escalar a redes</x-boton>
+                @endif
 
-            @if ($this->puedeTrabajar && $soporte->puedeTransicionarA('seguimiento'))
-                <button wire:click="seguimiento" class="bg-cyan-600 text-white px-4 py-2 rounded">
-                    Seguimiento
-                </button>
-            @endif
+                @if ($this->puedeTrabajar && $soporte->puedeTransicionarA('sin_contacto'))
+                    <x-boton wire:click="sinContacto" wire:confirm="¿Registrar un intento de contacto sin respuesta?">
+                        No contesta
+                    </x-boton>
+                @endif
 
-            @if ($this->puedeTrabajar && $soporte->estado === 'sin_contacto')
-                <button wire:click="retomar" class="bg-blue-600 text-white px-4 py-2 rounded">
-                    Retomar
-                </button>
-            @endif
+                @if ($this->puedeTrabajar && $soporte->puedeTransicionarA('seguimiento'))
+                    <x-boton wire:click="seguimiento">Seguimiento</x-boton>
+                @endif
 
-            @if ($this->puedeElevar && !$soporte->esInmediato())
-                <button wire:click="$set('panel', 'criticidad')" class="border border-red-300 text-red-700 px-4 py-2 rounded">
-                    Elevar a inmediato
-                </button>
-            @endif
+                @if ($this->puedeTrabajar && $soporte->estado === 'sin_contacto')
+                    <x-boton wire:click="retomar">Retomar</x-boton>
+                @endif
 
-            @if ($this->puedeCancelar && $soporte->puedeTransicionarA('cancelado'))
-                <button wire:click="$set('panel', 'cancelar')" class="bg-red-600 text-white px-4 py-2 rounded">
-                    Cancelar
-                </button>
-            @endif
+                @if ($this->puedeElevar && !$soporte->esInmediato())
+                    <x-boton wire:click="$set('panel', 'criticidad')">Elevar a inmediato</x-boton>
+                @endif
+
+                @if ($this->puedeCancelar && $soporte->puedeTransicionarA('cancelado'))
+                    <x-boton variante="peligro" wire:click="$set('panel', 'cancelar')">Cancelar</x-boton>
+                @endif
+            </div>
         </div>
 
         @if ($panel === 'cerrar')
-            <div class="border-t pt-3 mt-2 space-y-3">
+            <div class="mt-4 space-y-3 border-t border-linea pt-4">
                 <div>
-                    <label class="block font-medium mb-1 text-slate-800">Diagnóstico</label>
-                    <select wire:model="diagnostico_id" class="w-full border rounded p-2">
+                    <label for="diagnostico" class="etiqueta">Diagnóstico</label>
+                    <select id="diagnostico" wire:model="diagnostico_id" class="control h-9 py-0">
                         <option value="">— Selecciona —</option>
                         @foreach ($this->diagnosticos as $d)
                             <option value="{{ $d->id }}">{{ $d->nombre }}</option>
                         @endforeach
                     </select>
-                    @error('diagnostico_id') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
+                    @error('diagnostico_id') <p class="error-campo">{{ $message }}</p> @enderror
                 </div>
                 <div>
-                    <label class="block font-medium mb-1 text-slate-800">¿Qué se hizo?</label>
-                    <textarea wire:model="observaciones_cierre" rows="3" class="w-full border rounded p-2"></textarea>
-                    @error('observaciones_cierre') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
+                    <label for="observaciones" class="etiqueta">¿Qué se hizo?</label>
+                    <textarea id="observaciones" wire:model="observaciones_cierre" rows="3" class="control"></textarea>
+                    @error('observaciones_cierre') <p class="error-campo">{{ $message }}</p> @enderror
                 </div>
                 <div class="flex gap-2">
-                    <button wire:click="resolver" class="bg-green-600 text-white px-4 py-2 rounded">Confirmar cierre</button>
-                    <button wire:click="$set('panel', '')" class="px-4 py-2 rounded border">Volver</button>
+                    <x-boton variante="primario" wire:click="resolver">Confirmar cierre</x-boton>
+                    <x-boton variante="fantasma" wire:click="$set('panel', '')">Volver</x-boton>
                 </div>
             </div>
         @endif
 
         @if ($panel === 'visita')
-            <div class="border-t pt-3 mt-2 space-y-3">
-                <div class="grid gap-3 md:grid-cols-3">
+            <div class="mt-4 space-y-3 border-t border-linea pt-4">
+                <div>
+                    <label for="tecnico-campo" class="etiqueta">Técnico de campo</label>
+                    <select id="tecnico-campo" wire:model="tecnico_campo_id" class="control h-9 py-0">
+                        <option value="">— Selecciona —</option>
+                        @foreach ($this->tecnicosCampo as $t)
+                            <option value="{{ $t->id }}">{{ $t->user->name ?? $t->nombre }}</option>
+                        @endforeach
+                    </select>
+                    @error('tecnico_campo_id') <p class="error-campo">{{ $message }}</p> @enderror
+                </div>
+                <div class="grid grid-cols-2 gap-2">
                     <div>
-                        <label class="block font-medium mb-1 text-slate-800">Técnico de campo</label>
-                        <select wire:model="tecnico_campo_id" class="w-full border rounded p-2">
-                            <option value="">— Selecciona —</option>
-                            @foreach ($this->tecnicosCampo as $t)
-                                <option value="{{ $t->id }}">{{ $t->user->name ?? $t->nombre }}</option>
-                            @endforeach
-                        </select>
-                        @error('tecnico_campo_id') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
+                        <label for="fecha-programada" class="etiqueta">Fecha</label>
+                        <input id="fecha-programada" type="date" wire:model="fecha_programada" class="control h-9">
+                        @error('fecha_programada') <p class="error-campo">{{ $message }}</p> @enderror
                     </div>
                     <div>
-                        <label class="block font-medium mb-1 text-slate-800">Fecha</label>
-                        <input type="date" wire:model="fecha_programada" class="w-full border rounded p-2">
-                        @error('fecha_programada') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
-                    </div>
-                    <div>
-                        <label class="block font-medium mb-1 text-slate-800">Franja</label>
-                        <select wire:model="franja" class="w-full border rounded p-2">
+                        <label for="franja" class="etiqueta">Franja</label>
+                        <select id="franja" wire:model="franja" class="control h-9 py-0">
                             @foreach (\App\Models\OrdenTrabajo::FRANJAS as $valor => $etiqueta)
                                 <option value="{{ $valor }}">{{ $etiqueta }}</option>
                             @endforeach
                         </select>
                     </div>
                 </div>
-                <p class="text-xs text-slate-500">
+                <p class="text-xs text-tinta-3">
                     Al programar la visita el reloj del nivel 2 se detiene y el caso no se puede cerrar
                     hasta que el técnico la ejecute.
                 </p>
                 <div class="flex gap-2">
-                    <button wire:click="programarVisita" class="bg-indigo-600 text-white px-4 py-2 rounded">Programar</button>
-                    <button wire:click="$set('panel', '')" class="px-4 py-2 rounded border">Volver</button>
+                    <x-boton variante="primario" wire:click="programarVisita">Programar</x-boton>
+                    <x-boton variante="fantasma" wire:click="$set('panel', '')">Volver</x-boton>
                 </div>
             </div>
         @endif
 
         @if ($panel === 'escalar')
-            <div class="border-t pt-3 mt-2 space-y-3">
+            <div class="mt-4 space-y-3 border-t border-linea pt-4">
                 <div>
-                    <label class="block font-medium mb-1 text-slate-800">Ingeniero de redes</label>
-                    <select wire:model="ingeniero_redes_id" class="w-full border rounded p-2">
+                    <label for="ingeniero" class="etiqueta">Ingeniero de redes</label>
+                    <select id="ingeniero" wire:model="ingeniero_redes_id" class="control h-9 py-0">
                         <option value="">— Selecciona —</option>
                         @foreach ($this->ingenierosRedes as $ing)
                             <option value="{{ $ing->id }}">{{ $ing->name }}</option>
                         @endforeach
                     </select>
-                    @error('ingeniero_redes_id') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
+                    @error('ingeniero_redes_id') <p class="error-campo">{{ $message }}</p> @enderror
                 </div>
                 <div>
-                    <label class="block font-medium mb-1 text-slate-800">¿Por qué supera al nivel 2?</label>
-                    <textarea wire:model="motivo_escalamiento" rows="2" class="w-full border rounded p-2"></textarea>
-                    @error('motivo_escalamiento') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
+                    <label for="motivo-escalamiento" class="etiqueta">¿Por qué supera al nivel 2?</label>
+                    <textarea id="motivo-escalamiento" wire:model="motivo_escalamiento" rows="2" class="control"></textarea>
+                    @error('motivo_escalamiento') <p class="error-campo">{{ $message }}</p> @enderror
                 </div>
                 <div class="flex gap-2">
-                    <button wire:click="escalar" class="bg-slate-800 text-white px-4 py-2 rounded">Escalar</button>
-                    <button wire:click="$set('panel', '')" class="px-4 py-2 rounded border">Volver</button>
+                    <x-boton variante="primario" wire:click="escalar">Escalar</x-boton>
+                    <x-boton variante="fantasma" wire:click="$set('panel', '')">Volver</x-boton>
                 </div>
             </div>
         @endif
 
         @if ($panel === 'redes')
-            <div class="border-t pt-3 mt-2 space-y-3">
-                <label class="block font-medium mb-1 text-slate-800">Respuesta de ingeniería de redes</label>
-                <textarea wire:model="respuesta_n3" rows="3" class="w-full border rounded p-2"
+            <div class="mt-4 space-y-3 border-t border-linea pt-4">
+                <label for="respuesta-n3" class="etiqueta">Respuesta de ingeniería de redes</label>
+                <textarea id="respuesta-n3" wire:model="respuesta_n3" rows="3" class="control"
                     placeholder="Qué se encontró y qué debe hacer el nivel 2..."></textarea>
-                @error('respuesta_n3') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
+                @error('respuesta_n3') <p class="error-campo">{{ $message }}</p> @enderror
                 <div class="flex gap-2">
-                    <button wire:click="devolverDeRedes" class="bg-slate-800 text-white px-4 py-2 rounded">
-                        Devolver al nivel 2
-                    </button>
-                    <button wire:click="$set('panel', '')" class="px-4 py-2 rounded border">Volver</button>
+                    <x-boton variante="primario" wire:click="devolverDeRedes">Devolver al nivel 2</x-boton>
+                    <x-boton variante="fantasma" wire:click="$set('panel', '')">Volver</x-boton>
                 </div>
             </div>
         @endif
 
         @if ($panel === 'criticidad')
-            <div class="border-t pt-3 mt-2 space-y-3">
-                <label class="block font-medium mb-1 text-slate-800">¿Por qué debe atenderse de inmediato?</label>
-                <textarea wire:model="motivo_criticidad" rows="2" class="w-full border rounded p-2"></textarea>
-                @error('motivo_criticidad') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
+            <div class="mt-4 space-y-3 border-t border-linea pt-4">
+                <label for="motivo-criticidad" class="etiqueta">¿Por qué debe atenderse de inmediato?</label>
+                <textarea id="motivo-criticidad" wire:model="motivo_criticidad" rows="2" class="control"></textarea>
+                @error('motivo_criticidad') <p class="error-campo">{{ $message }}</p> @enderror
                 <div class="flex gap-2">
-                    <button wire:click="elevarCriticidad" class="bg-red-600 text-white px-4 py-2 rounded">Elevar</button>
-                    <button wire:click="$set('panel', '')" class="px-4 py-2 rounded border">Volver</button>
+                    <x-boton variante="primario" wire:click="elevarCriticidad">Elevar</x-boton>
+                    <x-boton variante="fantasma" wire:click="$set('panel', '')">Volver</x-boton>
                 </div>
             </div>
         @endif
 
         @if ($panel === 'cancelar')
-            <div class="border-t pt-3 mt-2 space-y-3">
-                <label class="block font-medium mb-1 text-slate-800">Motivo de cancelación</label>
-                <textarea wire:model="motivo_cancelacion" rows="2" class="w-full border rounded p-2"></textarea>
-                @error('motivo_cancelacion') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
+            <div class="mt-4 space-y-3 border-t border-linea pt-4">
+                <label for="motivo-cancelacion" class="etiqueta">Motivo de cancelación</label>
+                <textarea id="motivo-cancelacion" wire:model="motivo_cancelacion" rows="2" class="control"></textarea>
+                @error('motivo_cancelacion') <p class="error-campo">{{ $message }}</p> @enderror
                 <div class="flex gap-2">
-                    <button wire:click="cancelar" class="bg-red-600 text-white px-4 py-2 rounded">Confirmar</button>
-                    <button wire:click="$set('panel', '')" class="px-4 py-2 rounded border">Volver</button>
+                    <x-boton variante="peligro" wire:click="cancelar">Confirmar cancelación</x-boton>
+                    <x-boton variante="fantasma" wire:click="$set('panel', '')">Volver</x-boton>
                 </div>
             </div>
         @endif
-    </div>
+    </section>
 @endunless

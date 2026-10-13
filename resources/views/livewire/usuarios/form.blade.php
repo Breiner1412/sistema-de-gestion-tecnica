@@ -162,46 +162,51 @@ new #[Layout('layouts.app')] class extends Component {
     }
 }; ?>
 
-<div class="p-6 max-w-2xl">
-    <a href="{{ route('usuarios.index') }}" wire:navigate class="text-blue-600 text-sm">&larr; Volver a usuarios</a>
+<div class="mx-auto flex max-w-[680px] flex-col gap-4 px-4 py-5 sm:px-6 lg:py-6">
+    <x-encabezado :titulo="$usuario ? 'Editar usuario' : 'Nuevo usuario'">
+        <x-slot:antes>
+            <a href="{{ route('usuarios.index') }}" wire:navigate class="inline-flex items-center gap-1 text-tinta-3 no-underline hover:text-acento-texto">
+                <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                Usuarios
+            </a>
+        </x-slot:antes>
+    </x-encabezado>
 
-    <h1 class="text-2xl font-bold mt-2 mb-4 text-slate-800">
-        {{ $usuario ? 'Editar usuario' : 'Nuevo usuario' }}
-    </h1>
+    <form wire:submit="guardar" class="flex flex-col gap-4">
 
-    <form wire:submit="guardar" class="space-y-5">
+        <section class="tarjeta grid gap-4 p-4 sm:grid-cols-2 sm:p-5">
+            <h2 class="titulo-seccion sm:col-span-2">Cuenta</h2>
 
-        <div class="bg-white border rounded p-4 grid gap-4 md:grid-cols-2">
-            <div class="md:col-span-2">
-                <label class="block font-medium mb-1 text-slate-800">Nombre completo</label>
-                <input type="text" wire:model="name" class="w-full border rounded p-2">
-                @error('name') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
+            <div class="sm:col-span-2">
+                <label for="name" class="etiqueta">Nombre completo</label>
+                <input id="name" type="text" wire:model="name" class="control h-10">
+                @error('name') <p class="error-campo">{{ $message }}</p> @enderror
             </div>
 
             <div>
-                <label class="block font-medium mb-1 text-slate-800">Correo</label>
-                <input type="email" wire:model="email" class="w-full border rounded p-2">
-                @error('email') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
+                <label for="email" class="etiqueta">Correo</label>
+                <input id="email" type="email" wire:model="email" class="control h-10">
+                @error('email') <p class="error-campo">{{ $message }}</p> @enderror
             </div>
 
             <div>
-                <label class="block font-medium mb-1 text-slate-800">Estado</label>
-                <select wire:model="estado" class="w-full border rounded p-2">
+                <label for="estado" class="etiqueta">Estado</label>
+                <select id="estado" wire:model="estado" class="control h-10 py-0">
                     <option value="activo">Activo</option>
                     <option value="inactivo">Inactivo</option>
                 </select>
             </div>
 
-            <div class="md:col-span-2">
-                <label class="block font-medium mb-1 text-slate-800">Rol</label>
-                <select wire:model.live="rol" class="w-full border rounded p-2">
+            <div class="sm:col-span-2">
+                <label for="rol" class="etiqueta">Rol</label>
+                <select id="rol" wire:model.live="rol" class="control h-10 py-0">
                     @foreach (\App\Models\User::ROLES as $clave => $etiqueta)
                         <option value="{{ $clave }}">{{ $etiqueta }}</option>
                     @endforeach
                 </select>
-                @error('rol') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
+                @error('rol') <p class="error-campo">{{ $message }}</p> @enderror
 
-                <p class="text-xs text-slate-500 mt-2">
+                <p class="mt-2 rounded-control bg-elevada px-3 py-2 text-[13px] text-tinta-2">
                     @switch($rol)
                         @case('call_center') Registra los casos que no se resolvieron en caja, teléfono o WhatsApp. @break
                         @case('tecnico_soporte') Atiende los casos en remoto. Es el dueño del reloj de SLA. @break
@@ -214,40 +219,40 @@ new #[Layout('layouts.app')] class extends Component {
             </div>
 
             @if ($rol === 'tecnico_campo')
-                <div class="md:col-span-2">
-                    <label class="block font-medium mb-1 text-slate-800">Teléfono del técnico</label>
-                    <input type="text" wire:model="telefono" class="w-full border rounded p-2">
-                    <p class="text-xs text-slate-500 mt-1">Se crea automáticamente su perfil para poder asignarle visitas.</p>
-                    @error('telefono') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
+                <div class="sm:col-span-2">
+                    <label for="telefono" class="etiqueta">Teléfono del técnico</label>
+                    <input id="telefono" type="text" wire:model="telefono" class="control h-10 font-mono" inputmode="tel">
+                    <p class="mt-1 text-xs text-tinta-3">Se crea automáticamente su perfil para poder asignarle visitas.</p>
+                    @error('telefono') <p class="error-campo">{{ $message }}</p> @enderror
                 </div>
             @endif
-        </div>
+        </section>
 
-        <div class="bg-white border rounded p-4 grid gap-4 md:grid-cols-2">
-            <div class="md:col-span-2">
-                <h2 class="font-semibold text-slate-800">Contraseña</h2>
+        <section class="tarjeta grid gap-4 p-4 sm:grid-cols-2 sm:p-5">
+            <div class="sm:col-span-2">
+                <h2 class="titulo-seccion">Contraseña</h2>
                 @if ($usuario)
-                    <p class="text-xs text-slate-500">Déjala en blanco para no cambiarla.</p>
+                    <p class="mt-1 text-xs text-tinta-3">Déjala en blanco para no cambiarla.</p>
                 @endif
             </div>
 
             <div>
-                <label class="block font-medium mb-1 text-slate-800">Contraseña</label>
-                <input type="password" wire:model="password" class="w-full border rounded p-2" autocomplete="new-password">
-                @error('password') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
+                <label for="password" class="etiqueta">Contraseña</label>
+                <input id="password" type="password" wire:model="password" class="control h-10" autocomplete="new-password">
+                @error('password') <p class="error-campo">{{ $message }}</p> @enderror
             </div>
 
             <div>
-                <label class="block font-medium mb-1 text-slate-800">Confirmar contraseña</label>
-                <input type="password" wire:model="password_confirmation" class="w-full border rounded p-2" autocomplete="new-password">
+                <label for="password-confirmation" class="etiqueta">Confirmar contraseña</label>
+                <input id="password-confirmation" type="password" wire:model="password_confirmation" class="control h-10" autocomplete="new-password">
             </div>
-        </div>
+        </section>
 
         <div class="flex gap-2">
-            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded">
+            <x-boton variante="primario" type="submit">
                 {{ $usuario ? 'Guardar cambios' : 'Crear usuario' }}
-            </button>
-            <a href="{{ route('usuarios.index') }}" wire:navigate class="px-4 py-2 rounded border">Cancelar</a>
+            </x-boton>
+            <x-boton variante="fantasma" :href="route('usuarios.index')" wire:navigate>Cancelar</x-boton>
         </div>
     </form>
 </div>

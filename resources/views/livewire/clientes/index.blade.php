@@ -47,34 +47,36 @@ new #[Layout('layouts.app')] class extends Component {
     }
 }; ?>
 
-<div class="p-6">
-    @if (session('mensaje'))
-        <div class="bg-green-100 text-green-800 p-3 rounded mb-4">{{ session('mensaje') }}</div>
-    @endif
+<div class="mx-auto flex max-w-[1400px] flex-col gap-4 px-4 py-5 sm:px-6 lg:py-6">
+    <x-mensajes />
 
-    <div class="flex justify-between items-center mb-4">
-        <h1 class="text-2xl font-bold text-slate-800">Clientes</h1>
-        <div class="flex gap-2">
-            <a href="{{ route('clientes.recurrentes') }}" wire:navigate class="px-4 py-2 rounded border text-sm">
+    <x-encabezado titulo="Clientes" subtitulo="Abonados, sus contratos y los casos que han reportado.">
+        <x-slot:acciones>
+            <x-boton :href="route('clientes.recurrentes')" wire:navigate>
+                <span class="font-semibold text-recurrente">↻</span>
                 Ver recurrentes
-            </a>
-        @if ($this->puedeEditar)
-            <a href="{{ route('clientes.create') }}" wire:navigate class="bg-blue-600 text-white px-4 py-2 rounded">
-                + Nuevo cliente
-            </a>
-        @endif
-        </div>
-    </div>
+            </x-boton>
+            @if ($this->puedeEditar)
+                <x-boton variante="primario" :href="route('clientes.create')" wire:navigate>
+                    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>
+                    Nuevo cliente
+                </x-boton>
+            @endif
+        </x-slot:acciones>
+    </x-encabezado>
 
-    <div class="bg-white border rounded p-4 mb-4 grid gap-3 md:grid-cols-4">
-        <div class="md:col-span-3">
-            <label class="block text-xs font-medium text-slate-600 mb-1">Buscar</label>
-            <input type="search" wire:model.live.debounce.400ms="buscar" class="w-full border rounded p-2 text-sm"
-                placeholder="Nombre, cédula o código de abonado">
+    <div class="tarjeta grid gap-3 p-3 sm:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
+        <div>
+            <label for="buscar" class="etiqueta text-[13px]">Buscar</label>
+            <div class="relative">
+                <svg class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-tinta-3" width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="m10.5 10.5 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>
+                <input id="buscar" type="search" wire:model.live.debounce.400ms="buscar" class="control h-9 pl-8"
+                    placeholder="Nombre, cédula o código de abonado">
+            </div>
         </div>
         <div>
-            <label class="block text-xs font-medium text-slate-600 mb-1">Estado</label>
-            <select wire:model.live="estado" class="w-full border rounded p-2 text-sm">
+            <label for="f-estado" class="etiqueta text-[13px]">Estado</label>
+            <select id="f-estado" wire:model.live="estado" class="control h-9 py-0">
                 <option value="activo">Activos</option>
                 <option value="inactivo">Inactivos</option>
                 <option value="">Todos</option>
@@ -82,47 +84,39 @@ new #[Layout('layouts.app')] class extends Component {
         </div>
     </div>
 
-    <div class="overflow-x-auto bg-white border rounded shadow-sm">
-        <table class="w-full text-sm">
-            <thead class="bg-slate-700 text-white">
-                <tr>
-                    <th class="p-2 text-left font-semibold">Abonado</th>
-                    <th class="p-2 text-left font-semibold">Nombre</th>
-                    <th class="p-2 text-left font-semibold">Cédula / NIT</th>
-                    <th class="p-2 text-left font-semibold">Teléfono</th>
-                    <th class="p-2 text-right font-semibold">Contratos</th>
-                    <th class="p-2 text-right font-semibold">Casos</th>
-                    <th class="p-2 text-left font-semibold">Estado</th>
+    <x-tabla minimo="760px">
+        <thead>
+            <tr>
+                <th>Abonado</th>
+                <th>Nombre</th>
+                <th>Cédula / NIT</th>
+                <th>Teléfono</th>
+                <th class="text-right">Contratos</th>
+                <th class="text-right">Casos</th>
+                <th>Estado</th>
+            </tr>
+        </thead>
+        <tbody>
+            @forelse ($clientes as $cliente)
+                <tr wire:key="cliente-{{ $cliente->id }}" class="cursor-pointer"
+                    onclick="window.location='{{ route('clientes.show', $cliente) }}'">
+                    <td class="font-mono text-tinta-2">{{ $cliente->codigo_abonado ?? '—' }}</td>
+                    <td>
+                        <a href="{{ route('clientes.show', $cliente) }}" class="font-medium text-tinta no-underline hover:text-acento-texto hover:underline">{{ $cliente->nombre }}</a>
+                    </td>
+                    <td class="font-mono text-tinta-2">{{ $cliente->cedula }}</td>
+                    <td class="font-mono text-tinta-2">{{ $cliente->telefono ?? '—' }}</td>
+                    <td class="text-right font-mono text-tinta-2">{{ $cliente->contratos_count }}</td>
+                    <td class="text-right font-mono text-tinta-2">{{ $cliente->soportes_count }}</td>
+                    <td><x-estado :estado="$cliente->estado" :etiqueta="ucfirst($cliente->estado)" /></td>
                 </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-200">
-                @forelse ($clientes as $cliente)
-                    <tr class="hover:bg-slate-50 cursor-pointer"
-                        onclick="window.location='{{ route('clientes.show', $cliente) }}'">
-                        <td class="p-2 font-mono text-xs text-slate-600">{{ $cliente->codigo_abonado ?? '—' }}</td>
-                        <td class="p-2">{{ $cliente->nombre }}</td>
-                        <td class="p-2 text-slate-600">{{ $cliente->cedula }}</td>
-                        <td class="p-2 text-slate-600">{{ $cliente->telefono ?? '—' }}</td>
-                        <td class="p-2 text-right text-slate-600">{{ $cliente->contratos_count }}</td>
-                        <td class="p-2 text-right text-slate-600">{{ $cliente->soportes_count }}</td>
-                        <td class="p-2">
-                            <span @class([
-                                'px-2 py-1 rounded text-xs',
-                                'bg-green-200 text-green-900' => $cliente->estado === 'activo',
-                                'bg-slate-200 text-slate-700' => $cliente->estado !== 'activo',
-                            ])>{{ ucfirst($cliente->estado) }}</span>
-                        </td>
-                    </tr>
-                @empty
-                    <tr>
-                        <td colspan="7" class="p-6 text-center text-slate-500">
-                            No hay clientes que coincidan con la búsqueda.
-                        </td>
-                    </tr>
-                @endforelse
-            </tbody>
-        </table>
-    </div>
+            @empty
+                <tr>
+                    <td colspan="7" class="!h-24 text-center text-tinta-3">No hay clientes que coincidan con la búsqueda.</td>
+                </tr>
+            @endforelse
+        </tbody>
+    </x-tabla>
 
-    <div class="mt-4">{{ $clientes->links() }}</div>
+    <div>{{ $clientes->links() }}</div>
 </div>

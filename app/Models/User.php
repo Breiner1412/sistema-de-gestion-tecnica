@@ -40,6 +40,12 @@ class User extends Authenticatable
         self::ROL_TECNICO_CAMPO => 'Técnico de campo',
     ];
 
+    /** Temas de la interfaz: el de escritorio puede seguir al sistema operativo. */
+    public const TEMAS = ['claro', 'oscuro', 'sistema'];
+
+    /** La pantalla de campo se usa al sol: claro u oscuro, sin "sistema". */
+    public const TEMAS_CAMPO = ['claro', 'oscuro'];
+
     /** Roles que pueden gestionar casos en la bandeja. */
     public const ROLES_GESTION = [
         self::ROL_ADMIN,

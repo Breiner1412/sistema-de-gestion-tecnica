@@ -77,84 +77,89 @@ new #[Layout('layouts.app')] class extends Component {
     }
 }; ?>
 
-<div class="p-6 max-w-3xl">
-    <a href="{{ route('clientes.index') }}" wire:navigate class="text-blue-600 text-sm">&larr; Volver a clientes</a>
+<div class="mx-auto flex max-w-[760px] flex-col gap-4 px-4 py-5 sm:px-6 lg:py-6">
+    <x-encabezado :titulo="$cliente ? 'Editar cliente' : 'Nuevo cliente'">
+        <x-slot:antes>
+            <a href="{{ route('clientes.index') }}" wire:navigate class="inline-flex items-center gap-1 text-tinta-3 no-underline hover:text-acento-texto">
+                <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                Clientes
+            </a>
+        </x-slot:antes>
+    </x-encabezado>
 
-    <h1 class="text-2xl font-bold mt-2 mb-4 text-slate-800">
-        {{ $cliente ? 'Editar cliente' : 'Nuevo cliente' }}
-    </h1>
+    <form wire:submit="guardar" class="flex flex-col gap-4">
 
-    <form wire:submit="guardar" class="space-y-5">
-
-        <div class="bg-white border rounded p-4 grid gap-4 md:grid-cols-2">
-            <div>
-                <label class="block font-medium mb-1 text-slate-800">Código de abonado</label>
-                <input type="text" wire:model="codigo_abonado" class="w-full border rounded p-2"
-                    placeholder="TCF004906">
-                <p class="text-xs text-slate-500 mt-1">Es el identificador que usa la operación a diario.</p>
-                @error('codigo_abonado') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
-            </div>
+        <section class="tarjeta grid gap-4 p-4 sm:grid-cols-2 sm:p-5">
+            <h2 class="titulo-seccion sm:col-span-2">Identificación y contacto</h2>
 
             <div>
-                <label class="block font-medium mb-1 text-slate-800">Cédula o NIT</label>
-                <input type="text" wire:model="cedula" class="w-full border rounded p-2">
-                @error('cedula') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
-            </div>
-
-            <div class="md:col-span-2">
-                <label class="block font-medium mb-1 text-slate-800">Nombre o razón social</label>
-                <input type="text" wire:model="nombre" class="w-full border rounded p-2">
-                @error('nombre') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
+                <label for="codigo-abonado" class="etiqueta">Código de abonado</label>
+                <input id="codigo-abonado" type="text" wire:model="codigo_abonado" class="control h-10 font-mono" placeholder="TCF004906">
+                <p class="mt-1 text-xs text-tinta-3">Es el identificador que usa la operación a diario.</p>
+                @error('codigo_abonado') <p class="error-campo">{{ $message }}</p> @enderror
             </div>
 
             <div>
-                <label class="block font-medium mb-1 text-slate-800">Teléfono</label>
-                <input type="text" wire:model="telefono" class="w-full border rounded p-2">
-                @error('telefono') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
+                <label for="cedula" class="etiqueta">Cédula o NIT</label>
+                <input id="cedula" type="text" wire:model="cedula" class="control h-10 font-mono">
+                @error('cedula') <p class="error-campo">{{ $message }}</p> @enderror
+            </div>
+
+            <div class="sm:col-span-2">
+                <label for="nombre" class="etiqueta">Nombre o razón social</label>
+                <input id="nombre" type="text" wire:model="nombre" class="control h-10">
+                @error('nombre') <p class="error-campo">{{ $message }}</p> @enderror
             </div>
 
             <div>
-                <label class="block font-medium mb-1 text-slate-800">Correo</label>
-                <input type="email" wire:model="correo" class="w-full border rounded p-2">
-                @error('correo') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
+                <label for="telefono" class="etiqueta">Teléfono</label>
+                <input id="telefono" type="text" wire:model="telefono" class="control h-10 font-mono" inputmode="tel">
+                @error('telefono') <p class="error-campo">{{ $message }}</p> @enderror
             </div>
 
-            <div class="md:col-span-2">
-                <label class="block font-medium mb-1 text-slate-800">Dirección</label>
-                <input type="text" wire:model="direccion" class="w-full border rounded p-2">
-                @error('direccion') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
+            <div>
+                <label for="correo" class="etiqueta">Correo</label>
+                <input id="correo" type="email" wire:model="correo" class="control h-10">
+                @error('correo') <p class="error-campo">{{ $message }}</p> @enderror
             </div>
-        </div>
 
-        <div class="bg-white border rounded p-4 grid gap-4 md:grid-cols-3">
+            <div class="sm:col-span-2">
+                <label for="direccion" class="etiqueta">Dirección</label>
+                <input id="direccion" type="text" wire:model="direccion" class="control h-10">
+                @error('direccion') <p class="error-campo">{{ $message }}</p> @enderror
+            </div>
+        </section>
+
+        <section class="tarjeta grid gap-4 p-4 sm:grid-cols-3 sm:p-5">
+            <h2 class="titulo-seccion sm:col-span-3">Ubicación y estado</h2>
+
             <div>
-                <label class="block font-medium mb-1 text-slate-800">Latitud</label>
-                <input type="text" wire:model="latitud" class="w-full border rounded p-2" placeholder="4.8133">
-                @error('latitud') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
+                <label for="latitud" class="etiqueta">Latitud</label>
+                <input id="latitud" type="text" wire:model="latitud" class="control h-10 font-mono" placeholder="4.8133">
+                @error('latitud') <p class="error-campo">{{ $message }}</p> @enderror
             </div>
             <div>
-                <label class="block font-medium mb-1 text-slate-800">Longitud</label>
-                <input type="text" wire:model="longitud" class="w-full border rounded p-2" placeholder="-75.6961">
-                @error('longitud') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
+                <label for="longitud" class="etiqueta">Longitud</label>
+                <input id="longitud" type="text" wire:model="longitud" class="control h-10 font-mono" placeholder="-75.6961">
+                @error('longitud') <p class="error-campo">{{ $message }}</p> @enderror
             </div>
             <div>
-                <label class="block font-medium mb-1 text-slate-800">Estado</label>
-                <select wire:model="estado" class="w-full border rounded p-2">
+                <label for="estado" class="etiqueta">Estado</label>
+                <select id="estado" wire:model="estado" class="control h-10 py-0">
                     <option value="activo">Activo</option>
                     <option value="inactivo">Inactivo</option>
                 </select>
             </div>
-            <p class="md:col-span-3 text-xs text-slate-500">
+            <p class="text-xs text-tinta-3 sm:col-span-3">
                 Las coordenadas son opcionales; sirven para ubicar al abonado cuando se programa una visita.
             </p>
-        </div>
+        </section>
 
         <div class="flex gap-2">
-            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded">
+            <x-boton variante="primario" type="submit">
                 {{ $cliente ? 'Guardar cambios' : 'Crear cliente' }}
-            </button>
-            <a href="{{ $cliente ? route('clientes.show', $cliente) : route('clientes.index') }}" wire:navigate
-                class="px-4 py-2 rounded border">Cancelar</a>
+            </x-boton>
+            <x-boton variante="fantasma" :href="$cliente ? route('clientes.show', $cliente) : route('clientes.index')" wire:navigate>Cancelar</x-boton>
         </div>
     </form>
 </div>

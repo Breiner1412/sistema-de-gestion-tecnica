@@ -139,115 +139,122 @@ new #[Layout('layouts.app')] class extends Component {
     }
 }; ?>
 
-<div class="p-6">
-    <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
-        <div>
-            <h1 class="text-2xl font-bold text-slate-800">Abonados recurrentes</h1>
-            <p class="text-sm text-slate-500 mt-1">
-                Clientes con {{ $minimo }} o más reportes en la ventana. Son dos problemas distintos:
-                una falla que no se resolvió de raíz, o un cliente al que nunca se logra contactar.
-            </p>
-        </div>
+<div class="mx-auto flex max-w-[1400px] flex-col gap-4 px-4 py-5 sm:px-6 lg:py-6">
+    <x-encabezado titulo="Abonados recurrentes"
+        subtitulo="Clientes con {{ $minimo }} o más reportes en la ventana. Son dos problemas distintos: una falla que no se resolvió de raíz, o un cliente al que nunca se logra contactar.">
+        <x-slot:antes>
+            <a href="{{ route('clientes.index') }}" wire:navigate class="inline-flex items-center gap-1 text-tinta-3 no-underline hover:text-acento-texto">
+                <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                Clientes
+            </a>
+        </x-slot:antes>
+    </x-encabezado>
 
-        <div class="flex gap-2">
-            <select wire:model.live="meses" class="border rounded p-2 text-sm">
-                <option value="2">Últimos 2 meses</option>
-                <option value="6">Últimos 6 meses</option>
-                <option value="12">Últimos 12 meses</option>
-                <option value="0">Todo el histórico</option>
-            </select>
-            <select wire:model.live="motivo" class="border rounded p-2 text-sm">
-                <option value="">Todos los motivos</option>
-                <option value="falla_recurrente">Falla recurrente</option>
-                <option value="sin_contacto">No se logra contactar</option>
-            </select>
-            <button wire:click="exportar" class="px-4 py-2 rounded border text-sm" wire:loading.attr="disabled">
-                <span wire:loading.remove wire:target="exportar">Exportar CSV</span>
-                <span wire:loading wire:target="exportar">Generando...</span>
-            </button>
-        </div>
+    <div class="flex flex-wrap items-center gap-2">
+        <label for="meses" class="sr-only">Ventana</label>
+        <select id="meses" wire:model.live="meses" class="control h-9 w-auto py-0 pr-9">
+            <option value="2">Últimos 2 meses</option>
+            <option value="6">Últimos 6 meses</option>
+            <option value="12">Últimos 12 meses</option>
+            <option value="0">Todo el histórico</option>
+        </select>
+        <label for="motivo" class="sr-only">Motivo</label>
+        <select id="motivo" wire:model.live="motivo" class="control h-9 w-auto py-0 pr-9">
+            <option value="">Todos los motivos</option>
+            <option value="falla_recurrente">Falla recurrente</option>
+            <option value="sin_contacto">No se logra contactar</option>
+        </select>
+        <x-boton wire:click="exportar" wire:loading.attr="disabled" class="sm:ml-auto">
+            <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8m0 0 3-3m-3 3L5 7M2.5 11v2.5h11V11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <span wire:loading.remove wire:target="exportar">Exportar CSV</span>
+            <span wire:loading wire:target="exportar">Generando…</span>
+        </x-boton>
     </div>
 
     {{-- Patrones --}}
-    <div class="grid gap-4 md:grid-cols-2 mb-4">
-        <div class="bg-white border rounded p-4">
-            <h2 class="font-semibold text-slate-800 mb-2 text-sm">Qué reportan los recurrentes</h2>
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <section class="tarjeta p-4">
+            <h2 class="titulo-seccion mb-2">Qué reportan los recurrentes</h2>
             @forelse ($this->patrones['fallas'] as $nombre => $total)
-                <div class="flex justify-between text-sm text-slate-700 py-1 border-b last:border-0">
-                    <span>{{ $nombre }}</span><span class="font-medium">{{ $total }}</span>
+                <div class="flex justify-between gap-3 border-b border-linea-suave py-1.5 text-sm last:border-0">
+                    <span class="text-tinta-2">{{ $nombre }}</span><span class="font-mono font-medium">{{ $total }}</span>
                 </div>
             @empty
-                <p class="text-sm text-slate-500">Sin datos en la ventana.</p>
+                <p class="text-sm text-tinta-3">Sin datos en la ventana.</p>
             @endforelse
-        </div>
+        </section>
 
-        <div class="bg-white border rounded p-4">
-            <h2 class="font-semibold text-slate-800 mb-2 text-sm">Qué se les diagnosticó</h2>
+        <section class="tarjeta p-4">
+            <h2 class="titulo-seccion mb-2">Qué se les diagnosticó</h2>
             @forelse ($this->patrones['diagnosticos'] as $nombre => $total)
-                <div class="flex justify-between text-sm text-slate-700 py-1 border-b last:border-0">
-                    <span>{{ $nombre }}</span><span class="font-medium">{{ $total }}</span>
+                <div class="flex justify-between gap-3 border-b border-linea-suave py-1.5 text-sm last:border-0">
+                    <span class="text-tinta-2">{{ $nombre }}</span><span class="font-mono font-medium">{{ $total }}</span>
                 </div>
             @empty
-                <p class="text-sm text-slate-500">Todavía no hay diagnósticos registrados.</p>
+                <p class="text-sm text-tinta-3">Todavía no hay diagnósticos registrados.</p>
             @endforelse
-        </div>
+        </section>
     </div>
 
-    <div class="overflow-x-auto bg-white border rounded shadow-sm">
-        <table class="w-full text-sm">
-            <thead class="bg-slate-700 text-white">
-                <tr>
-                    <th class="p-2 text-left font-semibold">Abonado</th>
-                    <th class="p-2 text-left font-semibold">Cliente</th>
-                    <th class="p-2 text-right font-semibold">Reportes</th>
-                    <th class="p-2 text-right font-semibold">Sin contacto</th>
-                    <th class="p-2 text-right font-semibold">Abiertos</th>
-                    <th class="p-2 text-left font-semibold">Motivo probable</th>
-                    <th class="p-2 text-left font-semibold">Último</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-200">
-                @forelse ($clientes as $cliente)
-                    <tr class="hover:bg-slate-50 cursor-pointer"
-                        onclick="window.location='{{ route('clientes.show', $cliente) }}'">
-                        <td class="p-2 font-mono text-xs text-slate-600">{{ $cliente->codigo_abonado ?? '—' }}</td>
-                        <td class="p-2">{{ $cliente->nombre }}</td>
-                        <td class="p-2 text-right font-semibold">{{ $cliente->reportes }}</td>
-                        <td class="p-2 text-right text-slate-600">{{ $cliente->sin_contacto }}</td>
-                        <td class="p-2 text-right">
-                            @if ($cliente->abiertos > 0)
-                                <span class="text-orange-700 font-medium">{{ $cliente->abiertos }}</span>
+    <x-tabla minimo="820px">
+        <thead>
+            <tr>
+                <th>Abonado</th>
+                <th>Cliente</th>
+                <th class="text-right">Reportes</th>
+                <th class="text-right">Sin contacto</th>
+                <th class="text-right">Abiertos</th>
+                <th>Motivo probable</th>
+                <th class="text-right">Último</th>
+            </tr>
+        </thead>
+        <tbody>
+            @forelse ($clientes as $cliente)
+                <tr wire:key="recurrente-{{ $cliente->id }}" class="cursor-pointer"
+                    onclick="window.location='{{ route('clientes.show', $cliente) }}'">
+                    <td class="font-mono text-tinta-2">{{ $cliente->codigo_abonado ?? '—' }}</td>
+                    <td>
+                        <a href="{{ route('clientes.show', $cliente) }}" class="font-medium text-tinta no-underline hover:text-acento-texto hover:underline">{{ $cliente->nombre }}</a>
+                    </td>
+                    <td class="text-right">
+                        <span class="rounded-[3px] bg-recurrente-fondo px-1.5 font-mono font-semibold text-recurrente">↻ {{ $cliente->reportes }}</span>
+                    </td>
+                    <td class="text-right font-mono text-tinta-2">{{ $cliente->sin_contacto }}</td>
+                    <td class="text-right font-mono">
+                        @if ($cliente->abiertos > 0)
+                            <span class="font-semibold">{{ $cliente->abiertos }}</span>
+                        @else
+                            <span class="text-tinta-3">0</span>
+                        @endif
+                    </td>
+                    <td>
+                        <span class="inline-flex h-[22px] items-center gap-1.5 whitespace-nowrap rounded-full border border-linea px-2 text-xs font-medium">
+                            @if ($cliente->motivo === 'sin_contacto')
+                                <span class="size-[7px] rounded-full bg-estado-sincontacto" aria-hidden="true"></span>
+                                No se logra contactar
                             @else
-                                <span class="text-slate-400">0</span>
+                                <span class="size-[7px] rounded-full bg-recurrente" aria-hidden="true"></span>
+                                Falla recurrente
                             @endif
-                        </td>
-                        <td class="p-2">
-                            <span @class([
-                                'px-2 py-1 rounded text-xs whitespace-nowrap',
-                                'bg-amber-200 text-amber-900' => $cliente->motivo === 'falla_recurrente',
-                                'bg-orange-200 text-orange-900' => $cliente->motivo === 'sin_contacto',
-                            ])>
-                                {{ $cliente->motivo === 'sin_contacto' ? 'No se logra contactar' : 'Falla recurrente' }}
-                            </span>
-                        </td>
-                        <td class="p-2 text-slate-500 text-xs whitespace-nowrap">
-                            {{ $cliente->ultimo_reporte ? \Carbon\Carbon::parse($cliente->ultimo_reporte)->format('d/m/Y') : '—' }}
-                        </td>
-                    </tr>
-                @empty
-                    <tr>
-                        <td colspan="7" class="p-6 text-center text-slate-500">
-                            Ningún abonado alcanza {{ $minimo }} reportes en esta ventana.
-                        </td>
-                    </tr>
-                @endforelse
-            </tbody>
-        </table>
-    </div>
+                        </span>
+                    </td>
+                    <td class="whitespace-nowrap text-right font-mono text-xs text-tinta-3">
+                        {{ $cliente->ultimo_reporte ? \Carbon\Carbon::parse($cliente->ultimo_reporte)->format('d/m/Y') : '—' }}
+                    </td>
+                </tr>
+            @empty
+                <tr>
+                    <td colspan="7" class="!h-24 text-center text-tinta-3">
+                        Ningún abonado alcanza {{ $minimo }} reportes en esta ventana.
+                    </td>
+                </tr>
+            @endforelse
+        </tbody>
+    </x-tabla>
 
-    <div class="mt-4">{{ $clientes->links() }}</div>
+    <div>{{ $clientes->links() }}</div>
 
-    <p class="mt-3 text-xs text-slate-500">
+    <p class="text-xs text-tinta-3">
         Un abonado con falla recurrente necesita revisión de instalación, no otro soporte remoto.
         Uno que nunca contesta necesita otro canal o una visita agendada, no otra llamada.
     </p>
