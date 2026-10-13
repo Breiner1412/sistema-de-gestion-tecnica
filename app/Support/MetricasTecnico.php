@@ -49,7 +49,18 @@ class MetricasTecnico
     /** @return array<string, mixed> */
     public function calcular(): array
     {
-        $total = (clone $this->base())->count();
+        // Los conteos sueltos van en una sola pasada: antes eran cinco
+        // consultas (total, escalados, enviados a campo, inmediatos, promedio).
+        $resumen = (clone $this->base())
+            ->toBase()
+            ->selectRaw('count(*) as total')
+            ->selectRaw('sum(case when escalado_nivel_3 = ? then 1 else 0 end) as escalados', [true])
+            ->selectRaw('sum(case when criticidad = ? then 1 else 0 end) as inmediatos', [Soporte::CRITICIDAD_INMEDIATA])
+            ->selectRaw('sum(case when exists (select 1 from ordenes_trabajo where ordenes_trabajo.soporte_id = soportes.id and ordenes_trabajo.deleted_at is null) then 1 else 0 end) as enviados_campo')
+            ->selectRaw('avg(tiempo_resolucion) as promedio')
+            ->first();
+
+        $total = (int) $resumen->total;
 
         $porEstado = (clone $this->base())
             ->select('estado', DB::raw('count(*) as total'))
@@ -88,7 +99,7 @@ class MetricasTecnico
         $sinContacto = ($porEstado[Soporte::ESTADO_SIN_CONTACTO] ?? 0)
             + ($porEstado[Soporte::ESTADO_CERRADO_SIN_CONTACTO] ?? 0);
 
-        $promedio = (clone $this->base())->whereNotNull('tiempo_resolucion')->avg('tiempo_resolucion');
+        $promedio = $resumen->promedio;
 
         return [
             'anio' => $this->anio,
@@ -99,9 +110,9 @@ class MetricasTecnico
             'total' => $total,
             'resueltos' => $resueltos,
             'sin_contacto' => $sinContacto,
-            'escalados' => (clone $this->base())->where('escalado_nivel_3', true)->count(),
-            'enviados_campo' => (clone $this->base())->whereHas('ordenesTrabajo')->count(),
-            'inmediatos' => (clone $this->base())->where('criticidad', Soporte::CRITICIDAD_INMEDIATA)->count(),
+            'escalados' => (int) $resumen->escalados,
+            'enviados_campo' => (int) $resumen->enviados_campo,
+            'inmediatos' => (int) $resumen->inmediatos,
 
             // Enteros a propósito: son porcentajes, y además se guardan tal cual
             // en el snapshot JSON del informe publicado.

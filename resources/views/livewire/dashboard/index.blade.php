@@ -114,12 +114,14 @@ new #[Layout('layouts.app')] class extends Component {
             'porTecnico' => $this->base()
                 ->join('users', 'users.id', '=', 'soportes.tecnico_soporte_id')
                 ->select(
+                    'users.id',
                     'users.name',
                     DB::raw('count(*) as total'),
                     DB::raw("sum(case when soportes.estado = 'solucionado' then 1 else 0 end) as solucionados"),
                     DB::raw('avg(soportes.tiempo_resolucion) as promedio'),
                 )
-                ->groupBy('users.name')
+                // Por id y no por nombre: dos personas con el mismo nombre son dos filas.
+                ->groupBy('users.id', 'users.name')
                 ->orderByDesc('total')
                 ->limit(10)
                 ->get(),
