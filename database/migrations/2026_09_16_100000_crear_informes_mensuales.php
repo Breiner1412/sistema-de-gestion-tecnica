@@ -44,6 +44,13 @@ return new class extends Migration
 
     public function down(): void
     {
+        // MySQL descartó en silencio el índice propio de la clave cliente_id
+        // cuando apareció este compuesto, y ahora la clave depende de él: hay
+        // que darle otro índice antes de quitarlo, o falla con el error 1553.
+        Schema::table('soportes', function (Blueprint $table) {
+            $table->index('cliente_id');
+        });
+
         Schema::table('soportes', function (Blueprint $table) {
             $table->dropIndex(['cliente_id', 'created_at']);
         });

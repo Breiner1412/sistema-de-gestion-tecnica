@@ -32,6 +32,14 @@ return new class extends Migration
     {
         $soportaFk = DB::connection()->getDriverName() !== 'sqlite';
 
+        // La clave material_id quedó apoyada en el índice compuesto (MySQL
+        // descartó el suyo): necesita otro antes de quitarlo (error 1553).
+        if ($soportaFk) {
+            Schema::table('movimientos_inventario', function (Blueprint $table) {
+                $table->index('material_id');
+            });
+        }
+
         Schema::table('movimientos_inventario', function (Blueprint $table) use ($soportaFk) {
             $table->dropIndex(['material_id', 'created_at']);
 
