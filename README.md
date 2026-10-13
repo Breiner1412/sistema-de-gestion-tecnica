@@ -338,11 +338,16 @@ Crea la base y ajusta el `.env`:
 CREATE DATABASE gestion_tecnica CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
+Antes de sembrar, define en el `.env` el administrador (`ADMIN_EMAIL`, `ADMIN_PASSWORD`) y la
+clave de las cuentas demo (`DEMO_PASSWORD`): ninguna clave vive en el código.
+
 ```bash
 php artisan migrate --seed
-php artisan storage:link   # fotos y firmas de las visitas
 npm run dev
 ```
+
+Las fotos y firmas de las visitas se guardan en el disco privado (`storage/app/private`) y se
+sirven por una ruta que pregunta a la política de la visita: no hace falta `storage:link`.
 
 La pantalla de campo (`/campo`) usa la cámara y el GPS, y los navegadores solo los
 dan sobre HTTPS o en `localhost`. Para probarla desde el celular en la misma red hace
@@ -351,9 +356,12 @@ una IP local el navegador bloquea las dos cosas.
 
 ### Tareas programadas
 
-Dos comandos dependen del planificador: el reintento de los casos sin contacto (cada cuarto de
-hora) y las alertas de SLA (cada hora, de lunes a viernes entre las 7 y las 18). En el servidor
-basta una entrada de cron:
+Dependen del planificador: el reintento de los casos sin contacto (cada cuarto de hora), las
+alertas de SLA (cada hora, de lunes a viernes entre las 7 y las 18, hora de Colombia), la
+vigilancia de la cola (cada 5 minutos) y, en modo demo, el reinicio nocturno. En Docker los
+corre el contenedor `soporte-tareas` y los correos los envía `soporte-cola` (ver
+[Despliegue](#despliegue-con-docker-y-caddy)). Sin Docker basta una entrada de cron, más un
+`php artisan queue:work` vivo (con supervisor o systemd):
 
 ```
 * * * * * cd /ruta/del/proyecto && php artisan schedule:run >> /dev/null 2>&1
@@ -436,6 +444,139 @@ salen de su sesión.
 
 Todo lo ajustable vive en `config/sla.php`: jornada laboral, tiempos por criticidad,
 umbrales del semáforo, política de reintentos y festivos propios de la empresa.
+
+---
+
+## Despliegue con Docker y Caddy
+
+Pensado para una VM Linux con Docker donde un **Caddy compartido** con otras apps pone el
+HTTPS. La pila es una sola imagen (PHP 8.3-FPM + Nginx) en tres papeles, más MySQL:
+
+| Contenedor | Qué hace | Redes |
+|---|---|---|
+| `soporte-app` | Nginx en el puerto 80 y PHP-FPM. Al arrancar migra y, si la base está vacía, la siembra (`sistema:preparar`). | `interna` y `proxy` |
+| `soporte-cola` | `queue:work`: envía los correos de las alertas de SLA. | `interna` |
+| `soporte-tareas` | `schedule:work`: alertas, reintentos, vigilancia de la cola y reinicio de la demo. | `interna` |
+| `soporte-mysql` | MySQL 8.4, en hora de Colombia. | solo `interna` |
+
+Ningún contenedor publica puertos: Caddy llega a `soporte-app` por la red externa `proxy`, y
+MySQL solo es visible dentro de `interna`. Las fotos y firmas viven en el volumen `archivos`,
+compartido por los tres contenedores de la aplicación.
+
+### Caddy con IP fija
+
+Laravel solo cree en las cabeceras `X-Forwarded-*` (https, IP real del visitante) si vienen
+de la IP de Caddy, así que Caddy necesita una IP fija en la red `proxy`. Por defecto es
+`172.30.0.2` (`TRUSTED_PROXIES`). Si la red `proxy` de la VM aún no existe:
+
+```bash
+docker network create --subnet 172.30.0.0/24 --ip-range 172.30.0.128/25 proxy
+```
+
+`--ip-range` deja las IPs automáticas en la mitad alta, para que la `.2` nunca se la lleve
+otro contenedor. En el `docker-compose.yml` del Caddy compartido:
+
+```yaml
+services:
+  caddy:
+    networks:
+      proxy:
+        ipv4_address: 172.30.0.2
+networks:
+  proxy:
+    external: true
+```
+
+Si la red `proxy` ya existe con otra subred (`docker network inspect proxy`), elige una IP
+libre dentro de ella para Caddy y ponla en `TRUSTED_PROXIES`.
+
+El bloque del sitio, con las cabeceras de seguridad, está en
+[`docker/Caddyfile.ejemplo`](docker/Caddyfile.ejemplo):
+
+```caddy
+soporte.tudominio.com {
+	encode zstd gzip
+	import cabeceras-soporte   # HSTS, nosniff, X-Frame-Options, CSP... (ver el archivo)
+
+	request_body {
+		max_size 32MB          # un cierre de visita con fotos pesa hasta ~26 MB
+	}
+
+	reverse_proxy soporte-app:80
+}
+```
+
+### Primer despliegue
+
+```bash
+git clone <repositorio> soporte && cd soporte
+cp .env.production.example .env        # y llenar lo marcado con <...>
+docker compose run --rm --no-deps soporte-app php artisan key:generate --show   # -> APP_KEY
+docker compose up -d --build
+docker compose ps                      # soporte-app debe quedar "healthy"
+```
+
+En el primer arranque, con `DEMO_MODE=true` se carga la demo completa (casos, histórico y
+contratos); con `DEMO_MODE=false`, solo el administrador del `.env` y los catálogos. Después,
+reiniciar los contenedores nunca vuelve a sembrar.
+
+Para actualizar:
+
+```bash
+git pull
+docker compose up -d --build           # migra solo al arrancar soporte-app
+docker compose logs -f soporte-app soporte-cola soporte-tareas
+```
+
+### Respaldo con mysqldump
+
+La base:
+
+```bash
+mkdir -p respaldos
+docker exec soporte-mysql sh -c 'exec mysqldump --single-transaction --routines --triggers --no-tablespaces -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' \
+  | gzip > respaldos/gestion_tecnica-$(date +%F).sql.gz
+```
+
+Las fotos y firmas (el volumen `archivos`):
+
+```bash
+docker run --rm -v soporte_archivos:/datos:ro -v "$PWD/respaldos":/respaldo alpine \
+  tar czf /respaldo/archivos-$(date +%F).tar.gz -C /datos .
+```
+
+Todos los días a las 02:30, con cron en la VM (en la demo se reinicia todo a las 03:00, así que
+solo tiene sentido en una operación real):
+
+```
+30 2 * * * cd /ruta/soporte && docker exec soporte-mysql sh -c 'exec mysqldump --single-transaction --routines --triggers --no-tablespaces -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' | gzip > respaldos/gestion_tecnica-$(date +\%F).sql.gz && find respaldos -name '*.sql.gz' -mtime +14 -delete
+```
+
+Restaurar:
+
+```bash
+gunzip -c respaldos/gestion_tecnica-AAAA-MM-DD.sql.gz \
+  | docker exec -i soporte-mysql sh -c 'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"'
+```
+
+### Probarlo en el PC
+
+`docker-compose.local.yml` va encima del de producción: agrega un Caddy propio en
+`http://localhost:8080` y crea la red `proxy` con la misma IP fija. Las variables van en
+`.env.local` (fuera de git). En PowerShell:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.local.yml --env-file .env.local up -d --build
+docker compose -f docker-compose.yml -f docker-compose.local.yml --env-file .env.local ps
+start http://localhost:8080
+```
+
+Si el 8080 está ocupado, `PUERTO_LOCAL=8081` en `.env.local`. Para apagar (con `-v` borra
+también la base y las fotos):
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.local.yml --env-file .env.local down
+```
 
 ---
 
@@ -532,14 +673,26 @@ medición y cuáles son relleno.
 | 6 | Recurrentes e informe mensual de rendimiento por técnico | Hecha |
 | 7 | Interfaz en español y exportación de datos a CSV | Hecha |
 | 8 | Alertas por correo al entrar en riesgo o vencerse un SLA | Hecha |
+| 9 | Auditoría previa al despliegue: políticas, modo demo, Docker y Caddy | Hecha |
 
 ## Pruebas
 
 ```bash
-php artisan test
+php artisan test     # PHP, sobre SQLite en memoria
+npm run test:js      # la decisión de la cola offline del celular
 ```
 
-Pest sobre SQLite en memoria. Cubren lo que más duele si se rompe:
+En GitHub Actions ([`.github/workflows/pruebas.yml`](.github/workflows/pruebas.yml)) la suite
+corre además contra **MySQL 8.4**, que es lo que hay en producción: SQLite no tiene `YEAR()`,
+no altera claves foráneas ni `CHECK` y es laxo con los tipos. También prueba las migraciones de
+ida, vuelta completa e ida, el build de Vite y que la imagen de Docker se construya. En local,
+con un MySQL a mano:
+
+```bash
+DB_CONNECTION=mysql DB_HOST=127.0.0.1 DB_PORT=3306 DB_DATABASE=pruebas DB_USERNAME=root DB_PASSWORD=... php artisan test
+```
+
+Cubren lo que más duele si se rompe:
 
 - `tests/Unit/CalendarioHabilTest.php` — los 18 festivos de cada año, la Ley Emiliani, y que
   la aritmética salte fines de semana y festivos.
@@ -568,15 +721,14 @@ tablas existentes; en MySQL sí se crean.
 
 ### Deuda conocida
 
-- Las pantallas Livewire no tienen pruebas: lo cubierto es el dominio, no la interfaz.
-- La cola offline no tiene pruebas automáticas: el cierre está cubierto del lado del
-  servidor, pero el JavaScript que guarda y reintenta se probó a mano con el modo sin
-  conexión del navegador.
+- De la cola offline solo está probada la decisión por código HTTP y el dueño de cada
+  cierre (`tests/js`); el guardado en IndexedDB, el candado entre pestañas y el service
+  worker se probaron a mano, no con un navegador automatizado.
 - El service worker cachea el HTML de `/campo`, así que el token CSRF de una página muy
-  vieja puede caducar. Se detecta (419) y se avisa, pero obliga a volver a entrar.
-- El consecutivo `numero_soporte` puede colisionar si dos casos se crean en el mismo
-  instante; con el volumen actual no es un problema, pero la solución correcta es una
-  tabla de secuencias.
+  vieja puede caducar. Se detecta (419), el cierre queda guardado y la pantalla pide volver
+  a entrar.
+- La CSP lleva `unsafe-eval` porque Livewire trae Alpine, que evalúa sus expresiones. Se
+  quitaría con la versión CSP de Alpine.
 
 ## Licencia
 
@@ -593,7 +745,7 @@ cerrado hay **licencia comercial** disponible: escriba a rodriguezbreiner125@gma
 
 Esto es un resumen para orientarse, no asesoría legal; lo que vale es el texto de la licencia.
 
-## Sobre los datos
+## Nota sobre los datos
 
 El histórico viene de una operación real, con permiso expreso para usarlo. **Ningún dato
 personal de terceros está en este repositorio**: nombres, cédulas, teléfonos y códigos de
