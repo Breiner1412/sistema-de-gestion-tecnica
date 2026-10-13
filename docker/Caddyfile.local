@@ -1,0 +1,11 @@
+# Caddy del entorno local (docker-compose.local.yml). Sin HTTPS: escucha en el
+# 80 del contenedor, publicado en 127.0.0.1:8080 del PC.
+{
+	auto_https off
+	admin off
+}
+
+:80 {
+	encode zstd gzip
+	reverse_proxy soporte-app:80
+}
