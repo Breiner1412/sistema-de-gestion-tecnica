@@ -14,7 +14,7 @@
  * distinguir el fallo que se arregla reintentando del que no.
  */
 
-import { decidir } from './campo/decision.js'
+import { decidir, motivoPorDefecto } from './campo/decision.js'
 
 /* ---------------------------------------------------------------
  | Cola en el teléfono
@@ -128,13 +128,13 @@ async function intentar(pendiente) {
         return { decision, motivo: null }
     }
 
-    let motivo = 'El servidor rechazó este cierre.'
+    let motivo = motivoPorDefecto(respuesta.status)
 
     try {
         const cuerpo = await respuesta.json()
         motivo = cuerpo.message || motivo
     } catch {
-        /* sin cuerpo útil */
+        /* sin cuerpo útil: un 413 del proxy, por ejemplo, viene en HTML */
     }
 
     return { decision, motivo }

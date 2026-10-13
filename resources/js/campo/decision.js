@@ -29,9 +29,40 @@ export function decidir(estado) {
         return 'sesion'
     }
 
-    if (estado === 422 || estado === 403 || estado === 404) {
+    // Tiempo agotado o demasiadas peticiones: el mismo envío pasa más tarde.
+    if (estado === 408 || estado === 429) {
+        return 'reintentar'
+    }
+
+    // El resto de 4xx no mejora reintentando. Antes solo 403, 404 y 422 se
+    // apartaban: un 413 (cierre más pesado de lo que acepta el servidor) se
+    // reintentaba para siempre y dejaba atascada toda la cola detrás.
+    if (estado >= 400 && estado < 500) {
         return 'rechazado'
     }
 
     return 'reintentar'
+}
+
+/**
+ * Motivo para mostrar cuando el servidor no mandó uno (un 413 del proxy, por
+ * ejemplo, responde HTML y no JSON).
+ *
+ * @param {number} estado
+ * @returns {string}
+ */
+export function motivoPorDefecto(estado) {
+    if (estado === 413) {
+        return 'El cierre pesa demasiado para enviarlo. Quita algunas fotos y vuelve a cerrarlo.'
+    }
+
+    if (estado === 403) {
+        return 'Esta visita ya no está a tu nombre.'
+    }
+
+    if (estado === 404) {
+        return 'Esta visita ya no existe.'
+    }
+
+    return 'El servidor rechazó este cierre.'
 }

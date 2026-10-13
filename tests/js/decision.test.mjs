@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { decidir } from '../../resources/js/campo/decision.js'
+import { decidir, motivoPorDefecto } from '../../resources/js/campo/decision.js'
 
 test('un 2xx es lo único que permite borrar el cierre del teléfono', () => {
     assert.equal(decidir(200), 'enviado')
@@ -27,4 +27,20 @@ test('un rechazo del servidor se conserva como rechazado, no se descarta', () =>
     assert.equal(decidir(422), 'rechazado')
     assert.equal(decidir(403), 'rechazado')
     assert.equal(decidir(404), 'rechazado')
+})
+
+test('un cierre demasiado pesado se aparta en vez de atascar la cola', () => {
+    assert.equal(decidir(413), 'rechazado')
+    assert.match(motivoPorDefecto(413), /pesa demasiado/)
+})
+
+test('los demás 4xx tampoco se reintentan para siempre', () => {
+    for (const estado of [400, 405, 409, 410, 415]) {
+        assert.equal(decidir(estado), 'rechazado', `${estado}`)
+    }
+})
+
+test('tiempo agotado y demasiadas peticiones sí se reintentan', () => {
+    assert.equal(decidir(408), 'reintentar')
+    assert.equal(decidir(429), 'reintentar')
 })
