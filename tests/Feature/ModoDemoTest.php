@@ -40,3 +40,22 @@ it('solo protege las cuentas semilla cuando el modo demo está activo', function
     config(['demo.activo' => true]);
     expect(ModoDemo::protege($demo))->toBeTrue();
 });
+
+it('en producción APP_DEBUG se apaga aunque el .env diga true', function () {
+    config(['app.debug' => true]);
+    app()->detectEnvironment(fn () => 'production');
+
+    (new \App\Providers\AppServiceProvider(app()))->boot();
+
+    expect(config('app.debug'))->toBeFalse();
+});
+
+it('el ejemplo de producción no trae valores de desarrollo', function () {
+    $ejemplo = file_get_contents(base_path('.env.production.example'));
+
+    expect($ejemplo)->toContain('APP_ENV=production')
+        ->toContain('APP_DEBUG=false')
+        ->toContain('SESSION_SECURE_COOKIE=true')
+        ->not->toContain('DB_USERNAME=root')
+        ->not->toContain('LOG_LEVEL=debug');
+});

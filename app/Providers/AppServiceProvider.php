@@ -34,6 +34,8 @@ class AppServiceProvider extends ServiceProvider
     {
         MaterialOrden::observe(MaterialOrdenObserver::class);
 
+        $this->nuncaDepurarEnProduccion();
+
         ModoDemo::aplicar();
 
         // Los enlaces que se arman sin petición delante (los correos que manda
@@ -52,6 +54,19 @@ class AppServiceProvider extends ServiceProvider
 
         // Solo hace algo con PERFIL_CONSULTAS=true; apagado, ni se engancha.
         PerfilDeConsultas::escuchar();
+    }
+
+    /**
+     * APP_DEBUG=true en producción muestra a cualquier visitante la traza de
+     * un error, con rutas, consultas y variables. Si el .env lo trae por
+     * descuido, se apaga igual y queda escrito en el registro.
+     */
+    private function nuncaDepurarEnProduccion(): void
+    {
+        if ($this->app->isProduction() && config('app.debug')) {
+            config(['app.debug' => false]);
+            Log::critical('APP_DEBUG=true en producción: se apagó. Corrige el .env.');
+        }
     }
 
     /**

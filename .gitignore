@@ -31,3 +31,6 @@ Thumbs.db
 /database/database.sqlite
 /Claude outputs/
 *.sql
+
+# Entornos de Docker en local (con claves de prueba)
+.env.local
