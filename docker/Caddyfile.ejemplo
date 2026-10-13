@@ -1,0 +1,29 @@
+# Bloque para el Caddyfile del Caddy compartido de la VM (red "proxy").
+# Cambiar soporte.tudominio.com por el dominio real; Caddy saca el certificado
+# solo. soporte-app es el nombre del contenedor en la red "proxy".
+
+(cabeceras-soporte) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(self), geolocation=(self), microphone=(), payment=(), usb=()"
+		# Livewire trae Alpine, que evalúa sus expresiones: necesita unsafe-eval.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.bunny.net; font-src 'self' https://fonts.bunny.net; img-src 'self' data: blob: https://laravel.com; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'"
+		-Server
+		-X-Powered-By
+	}
+}
+
+soporte.tudominio.com {
+	encode zstd gzip
+	import cabeceras-soporte
+
+	# Un cierre de visita con fotos puede pesar unos 26 MB.
+	request_body {
+		max_size 32MB
+	}
+
+	reverse_proxy soporte-app:80
+}
