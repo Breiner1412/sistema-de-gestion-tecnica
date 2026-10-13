@@ -30,7 +30,11 @@ class LoginForm extends Form
     {
         $this->ensureIsNotRateLimited();
 
-        if (! Auth::attempt($this->only(['email', 'password']), $this->remember)) {
+        // Una cuenta desactivada no entra. El mensaje es el mismo de una
+        // clave mala: no se le confirma a nadie que la cuenta existe.
+        $credenciales = [...$this->only(['email', 'password']), 'estado' => 'activo'];
+
+        if (! Auth::attempt($credenciales, $this->remember)) {
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([

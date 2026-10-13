@@ -16,6 +16,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => \App\Http\Middleware\CheckRole::class,
         ]);
 
+        // En el grupo web va también en /livewire/update y en la cola del
+        // celular: una cuenta desactivada se queda fuera en la siguiente petición.
+        $middleware->appendToGroup('web', \App\Http\Middleware\CuentaActiva::class);
+
         // Las IPs salen de config/trustedproxy.php (TRUSTED_PROXIES), que el
         // middleware lee en cada petición. Aquí solo se fijan las cabeceras
         // que manda Caddy; el resto (ELB, prefijo) no se acepta de nadie.
