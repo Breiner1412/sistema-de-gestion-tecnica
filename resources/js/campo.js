@@ -14,7 +14,7 @@
  * distinguir el fallo que se arregla reintentando del que no.
  */
 
-import { decidir, motivoPorDefecto } from './campo/decision.js'
+import { decidir, esDe, motivoPorDefecto } from './campo/decision.js'
 
 /* ---------------------------------------------------------------
  | Cola en el teléfono
@@ -55,30 +55,51 @@ const cola = {
     borrar: (uuid) => conLaTienda('readwrite', (t) => t.delete(uuid)),
     obtener: (uuid) => conLaTienda('readonly', (t) => t.get(uuid)),
 
-    /** Lo que todavía se intenta enviar. */
+    /** Lo de quien tiene la sesión abierta que todavía se intenta enviar. */
     async porEnviar() {
-        return (await this.listar()).filter((p) => p.estado !== RECHAZADO)
+        return (await this.listar()).filter((p) => esMio(p) && p.estado !== RECHAZADO)
     },
 
     /** Lo que el servidor no aceptó: se guarda hasta que alguien decida. */
     async rechazados() {
-        return (await this.listar()).filter((p) => p.estado === RECHAZADO)
+        return (await this.listar()).filter((p) => esMio(p) && p.estado === RECHAZADO)
     },
+
+    /** Cierres que dejó en este teléfono otra cuenta y que esperan a su dueño. */
+    async deOtrasCuentas() {
+        return (await this.listar()).filter((p) => !esMio(p))
+    },
+}
+
+/**
+ * Un teléfono puede pasar de un técnico a otro. Cada cierre guarda quién lo
+ * hizo y solo se envía con la sesión de esa persona: con la de otro técnico
+ * el servidor lo rechazaba (y antes se borraba), y con la de un coordinador
+ * quedaba registrado a su nombre.
+ */
+function usuarioActual() {
+    return document.querySelector('meta[name="usuario-id"]')?.content ?? null
+}
+
+function esMio(pendiente) {
+    return esDe(pendiente, usuarioActual())
 }
 
 /** Avisa a la barra de estado de cuántos quedan y de si algo se rechazó. */
 async function anunciar(detalle = {}) {
     let pendientes = 0
     let rechazados = []
+    let ajenos = 0
 
     try {
         pendientes = (await cola.porEnviar()).length
         rechazados = (await cola.rechazados()).map(({ uuid, error, creado }) => ({ uuid, error, creado }))
+        ajenos = (await cola.deOtrasCuentas()).length
     } catch {
         /* sin IndexedDB no hay nada que contar */
     }
 
-    window.dispatchEvent(new CustomEvent('campo:cola', { detail: { pendientes, rechazados, ...detalle } }))
+    window.dispatchEvent(new CustomEvent('campo:cola', { detail: { pendientes, rechazados, ajenos, ...detalle } }))
 }
 
 /**
@@ -187,7 +208,7 @@ async function drenar() {
  * el cierre ya está a salvo en el teléfono.
  */
 async function encolar(url, carga) {
-    const pendiente = { uuid: carga.uuid, url, carga, creado: new Date().toISOString() }
+    const pendiente = { uuid: carga.uuid, url, carga, usuarioId: usuarioActual(), creado: new Date().toISOString() }
 
     await cola.guardar(pendiente)
     await anunciar()
@@ -285,6 +306,7 @@ function registrar(Alpine) {
         sinSenal: !navigator.onLine,
         pendientes: 0,
         rechazados: [],
+        ajenos: 0,
         verRechazados: false,
         ultimoError: '',
 
@@ -298,6 +320,9 @@ function registrar(Alpine) {
                 }
                 if (Array.isArray(detail.rechazados)) {
                     this.rechazados = detail.rechazados
+                }
+                if (typeof detail.ajenos === 'number') {
+                    this.ajenos = detail.ajenos
                 }
                 if (detail.error) {
                     this.ultimoError = detail.error

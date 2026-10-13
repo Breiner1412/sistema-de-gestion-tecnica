@@ -6,6 +6,8 @@
          y a veces con guantes. Un zoom accidental al tocar un botón estorba. --}}
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    {{-- La cola del teléfono solo envía los cierres de quien tiene la sesión. --}}
+    <meta name="usuario-id" content="{{ auth()->id() }}">
     <meta name="theme-color" content="#0f172a">
 
     <title>Mi ruta · {{ config('app.name') }}</title>
@@ -48,6 +50,11 @@
 
         <template x-if="ultimoError">
             <p class="bg-red-700 px-4 py-2 text-xs" x-text="ultimoError"></p>
+        </template>
+
+        <template x-if="ajenos > 0">
+            <p class="bg-slate-700 px-4 py-2 text-xs"
+               x-text="`${ajenos} cierre${ajenos === 1 ? '' : 's'} de otra cuenta guardado${ajenos === 1 ? '' : 's'} en este teléfono: se enviará${ajenos === 1 ? '' : 'n'} cuando esa persona vuelva a entrar.`"></p>
         </template>
 
         {{-- Lo que el servidor no aceptó sigue en el teléfono hasta que el

@@ -282,3 +282,13 @@ it('no pisa la hora de inicio si la visita ya estaba en progreso', function () {
 
     expect($visita->refresh()->hora_inicio->diffInMinutes($inicio, absolute: true))->toBeLessThan(2);
 });
+
+it('la pantalla de campo dice de quién es la sesión, para que la cola no mezcle cierres', function () {
+    $usuario = usuarioCon(User::ROL_TECNICO_CAMPO);
+    $visita = visitaDePrueba($usuario);
+
+    $this->actingAs($usuario)
+        ->get(route('campo.visita', $visita))
+        ->assertOk()
+        ->assertSee('<meta name="usuario-id" content="'.$usuario->id.'">', false);
+});

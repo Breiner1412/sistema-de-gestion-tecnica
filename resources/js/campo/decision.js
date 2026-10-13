@@ -66,3 +66,21 @@ export function motivoPorDefecto(estado) {
 
     return 'El servidor rechazó este cierre.'
 }
+
+/**
+ * ¿Este cierre guardado es de quien tiene la sesión? Solo esos se envían.
+ *
+ * Los guardados antes de que existiera el dueño no lo traen: se quedan con
+ * quien abra primero la pantalla, que en la práctica es el técnico del teléfono.
+ *
+ * @param {{usuarioId?: string|number}} pendiente
+ * @param {string|null} usuarioId  el de la sesión abierta
+ * @returns {boolean}
+ */
+export function esDe(pendiente, usuarioId) {
+    if (pendiente.usuarioId === undefined) {
+        return true
+    }
+
+    return usuarioId !== null && String(pendiente.usuarioId) === String(usuarioId)
+}

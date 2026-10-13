@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { decidir, motivoPorDefecto } from '../../resources/js/campo/decision.js'
+import { decidir, esDe, motivoPorDefecto } from '../../resources/js/campo/decision.js'
 
 test('un 2xx es lo único que permite borrar el cierre del teléfono', () => {
     assert.equal(decidir(200), 'enviado')
@@ -43,4 +43,15 @@ test('los demás 4xx tampoco se reintentan para siempre', () => {
 test('tiempo agotado y demasiadas peticiones sí se reintentan', () => {
     assert.equal(decidir(408), 'reintentar')
     assert.equal(decidir(429), 'reintentar')
+})
+
+test('la cola solo envía los cierres de quien tiene la sesión abierta', () => {
+    assert.equal(esDe({ usuarioId: '7' }, '7'), true)
+    assert.equal(esDe({ usuarioId: 7 }, '7'), true)
+    assert.equal(esDe({ usuarioId: '7' }, '9'), false, 'el cierre de otro técnico espera a su dueño')
+    assert.equal(esDe({ usuarioId: '7' }, null), false)
+})
+
+test('un cierre guardado antes de que existiera el dueño se envía con la sesión actual', () => {
+    assert.equal(esDe({}, '9'), true)
 })
