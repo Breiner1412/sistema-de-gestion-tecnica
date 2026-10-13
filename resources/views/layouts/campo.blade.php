@@ -93,9 +93,21 @@
 
     <script>
         // El service worker es lo que permite que la pantalla abra sin señal.
+        // Su alcance es solo /campo: el resto de la aplicación no pasa por él.
         if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('{{ asset('sw.js') }}').catch(() => {});
+            window.addEventListener('load', async () => {
+                const alcance = new URL('{{ url('/campo') }}').pathname;
+
+                // La versión anterior se registraba sobre todo el sitio.
+                for (const registro of await navigator.serviceWorker.getRegistrations()) {
+                    if (new URL(registro.scope).pathname !== alcance) {
+                        await registro.unregister();
+                    }
+                }
+
+                navigator.serviceWorker
+                    .register('{{ asset('sw.js') }}', { scope: alcance })
+                    .catch((error) => console.warn('No se pudo registrar el service worker', error));
             });
         }
     </script>
