@@ -51,11 +51,14 @@ Route::middleware(['auth'])->group(function () {
         Volt::route('/campo', 'campo.ruta')->name('campo.ruta');
         Volt::route('/campo/visitas/{orden}', 'campo.visita')->name('campo.visita');
 
-        // Estas dos las llama el JavaScript de la cola, no un formulario.
-        Route::post('/campo/visitas/{orden}/inicio', [CierreVisitaController::class, 'iniciar'])
-            ->name('campo.iniciar');
-        Route::post('/campo/visitas/{orden}/cierre', [CierreVisitaController::class, 'cerrar'])
-            ->name('campo.cerrar');
+        // Estas dos las llama el JavaScript de la cola, no un formulario. Un
+        // cierre puede pesar decenas de MB en fotos: con límite por usuario.
+        Route::middleware('throttle:campo')->group(function () {
+            Route::post('/campo/visitas/{orden}/inicio', [CierreVisitaController::class, 'iniciar'])
+                ->name('campo.iniciar');
+            Route::post('/campo/visitas/{orden}/cierre', [CierreVisitaController::class, 'cerrar'])
+                ->name('campo.cerrar');
+        });
     });
 
     // Bodega.
