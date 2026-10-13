@@ -2,7 +2,10 @@
 
 use App\Livewire\Actions\Logout;
 use App\Support\ModoDemo;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Livewire\Volt\Component;
 
 new class extends Component
@@ -21,7 +24,23 @@ new class extends Component
             'password' => ['required', 'string', 'current_password'],
         ]);
 
-        tap(Auth::user(), $logout(...))->delete();
+        // Una cuenta con casos, visitas o informes a su nombre no se puede
+        // borrar: la base lo impide para no perder el historial. Se avisa en
+        // vez de reventar con un error 500; lo que procede es desactivarla.
+        $usuario = Auth::user();
+
+        try {
+            DB::transaction(fn () => $usuario->delete());
+        } catch (QueryException) {
+            throw ValidationException::withMessages([
+                'password' => 'Tu cuenta tiene casos o informes a su nombre y no se puede borrar. Pide al administrador que la desactive.',
+            ]);
+        }
+
+        // La fila ya no existe: sin esto, logout() renueva el token de
+        // "recordarme" con un save() que volvería a insertar al usuario.
+        $usuario->setRememberToken(null);
+        $logout();
 
         $this->redirect('/', navigate: true);
     }
