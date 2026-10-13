@@ -43,8 +43,16 @@ jobs:
           extensions: pdo_mysql, pdo_sqlite, gd, intl, mbstring
           coverage: none
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
       - name: Dependencias
-        run: composer install --no-interaction --prefer-dist --no-progress
+        run: |
+          composer install --no-interaction --prefer-dist --no-progress
+          npm ci
+          npm run build
 
       - name: Entorno
         run: |
