@@ -327,6 +327,7 @@ class ImportarHistorico extends Command
                 'tiempo_resolucion' => $cerrado && $cierre ? $calendario->minutosEntre($ingreso, $cierre) : null,
                 'fecha_cierre' => $cerrado ? ($cierre ?? $ingreso) : null,
                 'sla_vence_at' => $vence?->format('Y-m-d H:i:s'),
+                'sla_presupuesto_minutos' => $vence ? $calendario->minutosEntre($ingreso, $vence) : null,
                 'alerta_sla_nivel' => $yaVencido ? 'vencido' : null,
                 'alerta_sla_at' => $yaVencido ? now() : null,
                 'intentos_contacto' => $estado === Soporte::ESTADO_CERRADO_SIN_CONTACTO ? 3 : 0,

@@ -21,9 +21,17 @@ trait GestionaSla
         return CalendarioHabil::desdeConfig();
     }
 
-    /** Minutos hábiles que la operación se da para resolver este caso. */
+    /**
+     * Minutos hábiles que la operación se da para resolver este caso: los que
+     * había entre el arranque del reloj y el vencimiento. Si el caso es de
+     * antes de que se guardara, se estima desde la configuración.
+     */
     public function presupuestoSlaMinutos(): int
     {
+        if ($this->sla_presupuesto_minutos) {
+            return (int) $this->sla_presupuesto_minutos;
+        }
+
         $config = config("sla.tiempos.{$this->criticidad}", config('sla.tiempos.normal'));
 
         if (($config['unidad'] ?? 'horas') === 'dias') {
@@ -53,6 +61,7 @@ trait GestionaSla
             'sla_vence_at' => $vence,
             'sla_pausado_at' => null,
             'sla_minutos_restantes' => null,
+            'sla_presupuesto_minutos' => $this->calendario()->minutosEntre($desde, $vence),
             'alerta_sla_nivel' => null,
             'alerta_sla_at' => null,
         ]);
