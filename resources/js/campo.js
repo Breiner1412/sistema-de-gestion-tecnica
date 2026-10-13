@@ -14,6 +14,8 @@
  * distinguir el fallo que se arregla reintentando del que no.
  */
 
+import { decidir } from './campo/decision.js'
+
 /* ---------------------------------------------------------------
  | Cola en el teléfono
  * --------------------------------------------------------------- */
@@ -45,21 +47,46 @@ async function conLaTienda(modo, accion) {
     })
 }
 
+const RECHAZADO = 'rechazado'
+
 const cola = {
     guardar: (pendiente) => conLaTienda('readwrite', (t) => t.put(pendiente)),
     listar: () => conLaTienda('readonly', (t) => t.getAll()),
     borrar: (uuid) => conLaTienda('readwrite', (t) => t.delete(uuid)),
-    async contar() {
-        try {
-            return (await this.listar()).length
-        } catch {
-            return 0
-        }
+    obtener: (uuid) => conLaTienda('readonly', (t) => t.get(uuid)),
+
+    /** Lo que todavía se intenta enviar. */
+    async porEnviar() {
+        return (await this.listar()).filter((p) => p.estado !== RECHAZADO)
+    },
+
+    /** Lo que el servidor no aceptó: se guarda hasta que alguien decida. */
+    async rechazados() {
+        return (await this.listar()).filter((p) => p.estado === RECHAZADO)
     },
 }
 
-function anunciar(detalle) {
-    window.dispatchEvent(new CustomEvent('campo:cola', { detail: detalle }))
+/** Avisa a la barra de estado de cuántos quedan y de si algo se rechazó. */
+async function anunciar(detalle = {}) {
+    let pendientes = 0
+    let rechazados = []
+
+    try {
+        pendientes = (await cola.porEnviar()).length
+        rechazados = (await cola.rechazados()).map(({ uuid, error, creado }) => ({ uuid, error, creado }))
+    } catch {
+        /* sin IndexedDB no hay nada que contar */
+    }
+
+    window.dispatchEvent(new CustomEvent('campo:cola', { detail: { pendientes, rechazados, ...detalle } }))
+}
+
+/**
+ * Deja el cierre guardado como rechazado, con el motivo, en vez de borrarlo:
+ * la firma y las fotos no se pueden volver a tomar.
+ */
+async function marcarRechazado(pendiente) {
+    await cola.guardar({ ...pendiente, estado: RECHAZADO })
 }
 
 /* ---------------------------------------------------------------
@@ -76,11 +103,10 @@ function cabeceras() {
 }
 
 /**
- * Un intento. Devuelve qué hacer con el pendiente, que es la decisión que
- * importa: reintentar a ciegas un cierre que el servidor rechazó por datos
- * inválidos deja la cola atascada para siempre.
+ * Un intento. Devuelve qué hacer con el pendiente (ver decision.js) y, si el
+ * servidor lo rechazó, el motivo que dio.
  *
- * @returns {'enviado'|'descartar'|'reintentar'|'sesion'}
+ * @returns {Promise<{decision: 'enviado'|'rechazado'|'reintentar'|'sesion', motivo: string|null}>}
  */
 async function intentar(pendiente) {
     let respuesta
@@ -93,37 +119,25 @@ async function intentar(pendiente) {
             body: JSON.stringify(pendiente.carga),
         })
     } catch {
-        return 'reintentar' // sin red, o se cayó a mitad
+        return { decision: decidir(null), motivo: null } // sin red, o se cayó a mitad
     }
 
-    if (respuesta.ok) {
-        return 'enviado'
+    const decision = decidir(respuesta.status)
+
+    if (decision !== 'rechazado') {
+        return { decision, motivo: null }
     }
 
-    // 419: la sesión caducó mientras el cierre esperaba en el teléfono. Los
-    // datos están bien; lo que falta es que la persona vuelva a entrar.
-    if (respuesta.status === 419 || respuesta.status === 401) {
-        return 'sesion'
+    let motivo = 'El servidor rechazó este cierre.'
+
+    try {
+        const cuerpo = await respuesta.json()
+        motivo = cuerpo.message || motivo
+    } catch {
+        /* sin cuerpo útil */
     }
 
-    // 422 y 403 no mejoran reintentando: o los datos no pasan la validación o
-    // esta visita no es de quien la envía.
-    if (respuesta.status === 422 || respuesta.status === 403 || respuesta.status === 404) {
-        let detalle = 'El servidor rechazó un cierre guardado.'
-
-        try {
-            const cuerpo = await respuesta.json()
-            detalle = cuerpo.message || detalle
-        } catch {
-            /* sin cuerpo útil */
-        }
-
-        pendiente.error = detalle
-
-        return 'descartar'
-    }
-
-    return 'reintentar' // 5xx y demás: puede ser pasajero
+    return { decision, motivo }
 }
 
 let drenando = false
@@ -137,28 +151,29 @@ async function drenar() {
     drenando = true
 
     try {
-        for (const pendiente of await cola.listar()) {
-            const decision = await intentar(pendiente)
+        for (const pendiente of await cola.porEnviar()) {
+            const { decision, motivo } = await intentar(pendiente)
 
             if (decision === 'enviado') {
                 await cola.borrar(pendiente.uuid)
                 continue
             }
 
-            if (decision === 'descartar') {
-                await cola.borrar(pendiente.uuid)
-                anunciar({ error: pendiente.error })
+            // Un rechazo no frena a los demás: se aparta y se sigue.
+            if (decision === 'rechazado') {
+                await marcarRechazado({ ...pendiente, error: motivo })
+                await anunciar({ error: motivo })
                 continue
             }
 
             if (decision === 'sesion') {
-                anunciar({ error: 'La sesión se cerró. Entra otra vez para enviar lo que quedó guardado.' })
+                await anunciar({ error: 'La sesión se cerró. Entra otra vez para enviar lo que quedó guardado.' })
             }
 
             break // el resto espera: no tiene sentido insistir con la red caída
         }
 
-        anunciar({ pendientes: await cola.contar() })
+        await anunciar()
     } finally {
         drenando = false
     }
@@ -175,17 +190,42 @@ async function encolar(url, carga) {
     const pendiente = { uuid: carga.uuid, url, carga, creado: new Date().toISOString() }
 
     await cola.guardar(pendiente)
-    anunciar({ pendientes: await cola.contar() })
+    await anunciar()
 
-    const decision = await intentar(pendiente)
+    const { decision, motivo } = await intentar(pendiente)
 
-    if (decision === 'enviado' || decision === 'descartar') {
+    if (decision === 'enviado') {
         await cola.borrar(pendiente.uuid)
     }
 
-    anunciar({ pendientes: await cola.contar(), error: decision === 'descartar' ? pendiente.error : null })
+    if (decision === 'rechazado') {
+        await marcarRechazado({ ...pendiente, error: motivo })
+    }
 
-    return decision
+    await anunciar({ error: motivo })
+
+    return { decision, motivo }
+}
+
+/** Baja el cierre rechazado como archivo, con fotos y firma, antes de descartarlo. */
+async function descargarCierre(uuid) {
+    const pendiente = await cola.obtener(uuid)
+
+    if (!pendiente) {
+        return
+    }
+
+    const archivo = new Blob([JSON.stringify(pendiente, null, 2)], { type: 'application/json' })
+    const enlace = document.createElement('a')
+    enlace.href = URL.createObjectURL(archivo)
+    enlace.download = `cierre-${uuid}.json`
+    enlace.click()
+    URL.revokeObjectURL(enlace.href)
+}
+
+async function descartarCierre(uuid) {
+    await cola.borrar(uuid)
+    await anunciar()
 }
 
 window.addEventListener('online', drenar)
@@ -244,6 +284,8 @@ function registrar(Alpine) {
     Alpine.data('estadoDeConexion', () => ({
         sinSenal: !navigator.onLine,
         pendientes: 0,
+        rechazados: [],
+        verRechazados: false,
         ultimoError: '',
 
         init() {
@@ -254,13 +296,26 @@ function registrar(Alpine) {
                 if (typeof detail.pendientes === 'number') {
                     this.pendientes = detail.pendientes
                 }
+                if (Array.isArray(detail.rechazados)) {
+                    this.rechazados = detail.rechazados
+                }
                 if (detail.error) {
                     this.ultimoError = detail.error
                     setTimeout(() => (this.ultimoError = ''), 12_000)
                 }
             })
 
-            cola.contar().then((n) => (this.pendientes = n))
+            anunciar()
+        },
+
+        descargar(uuid) {
+            descargarCierre(uuid)
+        },
+
+        async descartar(uuid) {
+            if (confirm('Se borra del teléfono con su firma y sus fotos. ¿Ya lo descargaste o lo volviste a cerrar?')) {
+                await descartarCierre(uuid)
+            }
         },
     }))
 
@@ -442,11 +497,11 @@ function registrar(Alpine) {
                 materiales: this.materiales.map(({ material_id, cantidad }) => ({ material_id, cantidad })),
             }
 
-            const decision = await encolar(this.urlCierre, carga)
+            const { decision, motivo } = await encolar(this.urlCierre, carga)
 
-            if (decision === 'descartar') {
+            if (decision === 'rechazado') {
                 this.enviando = false
-                this.error = 'El servidor rechazó el cierre. Revisa los datos.'
+                this.error = `${motivo} Quedó guardado en el teléfono: corrige y vuelve a cerrar, o descárgalo desde la barra de arriba.`
 
                 return
             }

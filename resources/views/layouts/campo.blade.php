@@ -49,6 +49,28 @@
         <template x-if="ultimoError">
             <p class="bg-red-700 px-4 py-2 text-xs" x-text="ultimoError"></p>
         </template>
+
+        {{-- Lo que el servidor no aceptó sigue en el teléfono hasta que el
+             técnico decida: la firma y las fotos no se pueden volver a tomar. --}}
+        <template x-if="rechazados.length > 0">
+            <div class="bg-red-800 px-4 py-2 text-xs">
+                <button type="button" class="underline" @click="verRechazados = !verRechazados"
+                        x-text="`${rechazados.length} cierre${rechazados.length === 1 ? '' : 's'} sin aceptar en este teléfono`"></button>
+
+                <ul x-show="verRechazados" class="mt-2 space-y-2">
+                    <template x-for="cierre in rechazados" :key="cierre.uuid">
+                        <li class="rounded bg-red-900/60 p-2">
+                            <p x-text="cierre.error"></p>
+                            <p class="text-red-200" x-text="new Date(cierre.creado).toLocaleString()"></p>
+                            <div class="mt-1 flex gap-3">
+                                <button type="button" class="underline" @click="descargar(cierre.uuid)">Descargar copia</button>
+                                <button type="button" class="underline" @click="descartar(cierre.uuid)">Descartar</button>
+                            </div>
+                        </li>
+                    </template>
+                </ul>
+            </div>
+        </template>
     </div>
 
     <main class="mx-auto max-w-xl pb-24">
