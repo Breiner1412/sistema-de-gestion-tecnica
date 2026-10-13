@@ -6,7 +6,7 @@
     vez de romper la página. Los estilos de th/td viven en .tabla (app.css).
 --}}
 <div {{ $attributes->merge(['class' => 'tarjeta overflow-hidden']) }}>
-    <div class="overflow-x-auto">
+    <div class="relative overflow-x-auto">
         <table class="tabla" style="min-width: {{ $minimo }}">
             {{ $slot }}
         </table>

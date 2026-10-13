@@ -161,6 +161,13 @@
 
         body {
             background: #fff;
+            print-color-adjust: exact;
+            -webkit-print-color-adjust: exact;
+        }
+
+        /* En papel no van el menú ni los botones. */
+        .no-imprimir {
+            display: none !important;
         }
     }
 

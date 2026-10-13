@@ -35,7 +35,7 @@ new class extends Component {
     $iniciales = collect(explode(' ', $usuario->name))->filter()->take(2)->map(fn ($p) => mb_substr($p, 0, 1))->implode('');
 @endphp
 
-<div x-data="{ abierto: false }" class="lg:sticky lg:top-0 lg:h-screen lg:w-[232px] lg:shrink-0">
+<div x-data="{ abierto: false }" class="no-imprimir lg:sticky lg:top-0 lg:h-screen lg:w-[232px] lg:shrink-0">
 
     {{-- Barra superior en móvil --}}
     <div class="sticky top-0 z-40 flex h-14 items-center gap-3 bg-menu px-3 lg:hidden">
