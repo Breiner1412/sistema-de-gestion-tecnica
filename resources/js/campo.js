@@ -170,6 +170,7 @@ async function drenar() {
     }
 
     drenando = true
+    let sesionCaducada = false
 
     try {
         for (const pendiente of await cola.porEnviar()) {
@@ -187,14 +188,13 @@ async function drenar() {
                 continue
             }
 
-            if (decision === 'sesion') {
-                await anunciar({ error: 'La sesión se cerró. Entra otra vez para enviar lo que quedó guardado.' })
-            }
+            sesionCaducada = decision === 'sesion'
 
             break // el resto espera: no tiene sentido insistir con la red caída
         }
 
-        await anunciar()
+        // Tras volver a entrar, una vuelta limpia quita el aviso de sesión.
+        await anunciar({ sesionCaducada })
     } finally {
         drenando = false
     }
@@ -223,7 +223,7 @@ async function encolar(url, carga) {
         await marcarRechazado({ ...pendiente, error: motivo })
     }
 
-    await anunciar({ error: motivo })
+    await anunciar({ error: motivo, sesionCaducada: decision === 'sesion' })
 
     return { decision, motivo }
 }
@@ -307,6 +307,7 @@ function registrar(Alpine) {
         pendientes: 0,
         rechazados: [],
         ajenos: 0,
+        sesionCaducada: false,
         verRechazados: false,
         ultimoError: '',
 
@@ -323,6 +324,9 @@ function registrar(Alpine) {
                 }
                 if (typeof detail.ajenos === 'number') {
                     this.ajenos = detail.ajenos
+                }
+                if (typeof detail.sesionCaducada === 'boolean') {
+                    this.sesionCaducada = detail.sesionCaducada
                 }
                 if (detail.error) {
                     this.ultimoError = detail.error
@@ -361,6 +365,7 @@ function registrar(Alpine) {
         error: '',
         listo: false,
         guardadoSinSenal: false,
+        sesionCaducada: false,
         lienzoFirma: null,
 
         init() {
@@ -533,9 +538,15 @@ function registrar(Alpine) {
 
             // Enviado o guardado: en los dos casos el técnico ya terminó aquí.
             this.listo = true
-            this.guardadoSinSenal = decision !== 'enviado'
+            this.guardadoSinSenal = decision === 'reintentar'
 
-            setTimeout(() => (window.location.href = this.urlRuta), 1600)
+            // Con la sesión caducada no hay "señal" que esperar: hay que
+            // volver a entrar. No se lo manda a la ruta, que pediría login.
+            this.sesionCaducada = decision === 'sesion'
+
+            if (!this.sesionCaducada) {
+                setTimeout(() => (window.location.href = this.urlRuta), 1600)
+            }
         },
     }))
 }

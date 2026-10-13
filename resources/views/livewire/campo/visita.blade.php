@@ -97,11 +97,19 @@ new #[Layout('layouts.campo')] class extends Component {
             {{-- Confirmación --}}
             <template x-if="listo">
                 <div class="rounded-xl border bg-white p-8 text-center shadow-sm">
-                    <p class="text-lg font-bold" x-text="guardadoSinSenal ? 'Guardado en el teléfono' : 'Visita cerrada'"></p>
+                    <p class="text-lg font-bold"
+                       x-text="sesionCaducada || guardadoSinSenal ? 'Guardado en el teléfono' : 'Visita cerrada'"></p>
                     <p class="mt-2 text-sm text-slate-600"
-                       x-text="guardadoSinSenal
-                           ? 'Se enviará solo cuando vuelva la señal. Ya puedes seguir con la siguiente.'
-                           : 'El caso quedó cerrado en el sistema.'"></p>
+                       x-text="sesionCaducada
+                           ? 'Tu sesión se cerró. Entra otra vez y el cierre se enviará solo.'
+                           : (guardadoSinSenal
+                               ? 'Se enviará solo cuando vuelva la señal. Ya puedes seguir con la siguiente.'
+                               : 'El caso quedó cerrado en el sistema.')"></p>
+                    <template x-if="sesionCaducada">
+                        <a href="{{ route('login') }}" class="mt-4 inline-block rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
+                            Entrar otra vez
+                        </a>
+                    </template>
                 </div>
             </template>
 

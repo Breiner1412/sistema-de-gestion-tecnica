@@ -52,6 +52,13 @@
             <p class="bg-red-700 px-4 py-2 text-xs" x-text="ultimoError"></p>
         </template>
 
+        <template x-if="sesionCaducada">
+            <p class="bg-amber-700 px-4 py-2 text-xs">
+                Tu sesión se cerró. Lo guardado sigue en el teléfono:
+                <a href="{{ route('login') }}" class="font-semibold underline">entra otra vez</a> y se enviará solo.
+            </p>
+        </template>
+
         <template x-if="ajenos > 0">
             <p class="bg-slate-700 px-4 py-2 text-xs"
                x-text="`${ajenos} cierre${ajenos === 1 ? '' : 's'} de otra cuenta guardado${ajenos === 1 ? '' : 's'} en este teléfono: se enviará${ajenos === 1 ? '' : 'n'} cuando esa persona vuelva a entrar.`"></p>
