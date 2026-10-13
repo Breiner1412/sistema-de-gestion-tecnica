@@ -2,7 +2,6 @@
 
 use App\Models\Inventario;
 use App\Models\MovimientoInventario;
-use App\Models\User;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
@@ -14,7 +13,7 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function mount(Inventario $material): void
     {
-        abort_unless(auth()->user()->tieneRol(User::ROL_ADMIN, User::ROL_GERENTE), 403);
+        $this->authorize('view', $material);
 
         $this->material = $material;
     }

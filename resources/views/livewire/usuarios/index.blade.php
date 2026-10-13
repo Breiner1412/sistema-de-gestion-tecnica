@@ -17,7 +17,7 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function mount(): void
     {
-        abort_unless(auth()->user()->esAdmin(), 403);
+        $this->authorize('viewAny', User::class);
     }
 
     public function updated($propiedad): void
@@ -30,9 +30,8 @@ new #[Layout('layouts.app')] class extends Component {
     /** Desactivar en vez de borrar: los casos históricos siguen apuntando al usuario. */
     public function alternarEstado(int $id): void
     {
-        abort_unless(auth()->user()->esAdmin(), 403);
-
         $usuario = User::findOrFail($id);
+        $this->authorize('update', $usuario);
 
         if ($usuario->id === auth()->id()) {
             session()->flash('error', 'No puedes desactivar tu propia cuenta.');

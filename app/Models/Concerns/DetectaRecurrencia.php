@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models\Concerns;
 
 use App\Models\Soporte;
@@ -76,30 +78,40 @@ trait DetectaRecurrencia
      * Abonados con al menos N reportes dentro de una ventana de meses,
      * con las cifras que hacen falta para decidir qué hacer con cada uno.
      */
-    public function scopeRecurrentes(Builder $query, ?int $meses = null, ?int $minimo = null): Builder
+    /**
+     * Las cifras salen de UNA agregación de soportes por cliente que se une a
+     * la tabla de clientes. Antes eran seis subconsultas correlacionadas por
+     * cada uno de los 4.114 abonados.
+     *
+     * El motivo también se filtra aquí, en SQL. Filtrarlo en PHP después de
+     * paginar dejaba páginas con menos filas y un total que no cuadraba.
+     */
+    public function scopeRecurrentes(Builder $query, ?int $meses = null, ?int $minimo = null, ?string $motivo = null): Builder
     {
         $meses ??= (int) config('sla.recurrencia.ventana_larga_meses', 12);
         $minimo ??= (int) config('sla.recurrencia.minimo_en_ventana_larga', 3);
 
         $desde = $meses > 0 ? now()->subMonths($meses) : null;
+        $sinContacto = [Soporte::ESTADO_SIN_CONTACTO, Soporte::ESTADO_CERRADO_SIN_CONTACTO];
+        $finales = Soporte::ESTADOS_FINALES;
 
-        $enVentana = fn(Builder $q) => $desde ? $q->where('soportes.created_at', '>=', $desde) : $q;
+        $porCliente = Soporte::query()
+            ->toBase()
+            ->select('cliente_id')
+            ->selectRaw('count(*) as reportes')
+            ->selectRaw('sum(case when estado in (?, ?) then 1 else 0 end) as sin_contacto', $sinContacto)
+            ->selectRaw('sum(case when estado not in ('.implode(', ', array_fill(0, count($finales), '?')).') then 1 else 0 end) as abiertos', $finales)
+            ->selectRaw('max(created_at) as ultimo_reporte')
+            ->selectRaw('min(created_at) as primer_reporte')
+            ->when($desde, fn ($q) => $q->where('created_at', '>=', $desde))
+            ->groupBy('cliente_id')
+            ->havingRaw('count(*) >= ?', [$minimo]);
 
         return $query
-            ->withCount([
-                'soportes as reportes' => $enVentana,
-                'soportes as sin_contacto' => fn(Builder $q) => $enVentana($q)->whereIn('soportes.estado', [
-                    Soporte::ESTADO_SIN_CONTACTO,
-                    Soporte::ESTADO_CERRADO_SIN_CONTACTO,
-                ]),
-                'soportes as abiertos' => fn(Builder $q) => $enVentana($q)
-                    ->whereNotIn('soportes.estado', Soporte::ESTADOS_FINALES),
-            ])
-            ->withMax(['soportes as ultimo_reporte' => $enVentana], 'created_at')
-            ->withMin(['soportes as primer_reporte' => $enVentana], 'created_at')
-            // whereHas con operador arma la condición dentro del WHERE. Un HAVING
-            // sobre el alias de un withCount funciona en MySQL pero no en SQLite,
-            // que exige que la consulta sea agregada.
-            ->whereHas('soportes', $enVentana, '>=', $minimo);
+            ->joinSub($porCliente, 'recurrencia', 'recurrencia.cliente_id', '=', 'clientes.id')
+            ->select('clientes.*', 'recurrencia.reportes', 'recurrencia.sin_contacto', 'recurrencia.abiertos',
+                'recurrencia.ultimo_reporte', 'recurrencia.primer_reporte')
+            ->when($motivo === self::MOTIVO_SIN_CONTACTO, fn ($q) => $q->whereRaw('recurrencia.sin_contacto * 2 >= recurrencia.reportes'))
+            ->when($motivo === self::MOTIVO_FALLA, fn ($q) => $q->whereRaw('recurrencia.sin_contacto * 2 < recurrencia.reportes'));
     }
 }

@@ -1,12 +1,11 @@
 <?php
 
 use App\Models\Cliente;
-use App\Models\Contrato;
 use App\Models\EquipoInstalado;
-use App\Models\User;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Locked;
 use Livewire\Volt\Component;
 
 new #[Layout('layouts.app')] class extends Component {
@@ -14,7 +13,9 @@ new #[Layout('layouts.app')] class extends Component {
 
     public string $panel = '';
 
-    // Contrato
+    // Contrato. Los ids los pone el servidor (editarContrato, nuevoEquipo):
+    // #[Locked] impide que el navegador los cambie por los de otro abonado.
+    #[Locked]
     public ?int $contrato_id = null;
     public string $numero_contrato = '';
     public string $fecha_inicio = '';
@@ -23,6 +24,7 @@ new #[Layout('layouts.app')] class extends Component {
     public string $contrato_estado = 'activo';
 
     // Equipo
+    #[Locked]
     public ?int $equipo_contrato_id = null;
     public string $equipo_tipo = 'router';
     public string $equipo_modelo = '';
@@ -31,6 +33,8 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function mount(Cliente $cliente): void
     {
+        $this->authorize('view', $cliente);
+
         $this->cliente = $cliente;
         $this->recargar();
     }
@@ -83,7 +87,7 @@ new #[Layout('layouts.app')] class extends Component {
     #[Computed]
     public function puedeEditar(): bool
     {
-        return auth()->user()->tieneRol(User::ROL_ADMIN, User::ROL_GERENTE, User::ROL_CALL_CENTER);
+        return auth()->user()->can('update', $this->cliente);
     }
 
     /* ---------------------------------------------------------------
@@ -117,7 +121,7 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function guardarContrato(): void
     {
-        abort_unless($this->puedeEditar, 403);
+        $this->authorize('update', $this->cliente);
 
         $datos = $this->validate([
             'numero_contrato' => [
@@ -134,7 +138,6 @@ new #[Layout('layouts.app')] class extends Component {
         ]);
 
         $atributos = [
-            'cliente_id' => $this->cliente->id,
             'numero_contrato' => $datos['numero_contrato'],
             'fecha_inicio' => $datos['fecha_inicio'],
             'fecha_fin' => $datos['fecha_fin'] ?: null,
@@ -142,9 +145,11 @@ new #[Layout('layouts.app')] class extends Component {
             'estado' => $datos['contrato_estado'],
         ];
 
+        // Siempre a través del cliente: un contrato ajeno da 404, no se pisa
+        // ni se muda a este abonado.
         $this->contrato_id
-            ? Contrato::whereKey($this->contrato_id)->update($atributos)
-            : Contrato::create($atributos);
+            ? $this->cliente->contratos()->findOrFail($this->contrato_id)->update($atributos)
+            : $this->cliente->contratos()->create($atributos);
 
         $this->panel = '';
         $this->recargar();
@@ -159,7 +164,7 @@ new #[Layout('layouts.app')] class extends Component {
     public function nuevoEquipo(int $contratoId): void
     {
         $this->reset(['equipo_modelo', 'equipo_serie']);
-        $this->equipo_contrato_id = $contratoId;
+        $this->equipo_contrato_id = $this->cliente->contratos()->findOrFail($contratoId)->id;
         $this->equipo_tipo = 'router';
         $this->equipo_fecha = today()->toDateString();
         $this->panel = 'equipo';
@@ -167,10 +172,13 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function guardarEquipo(): void
     {
-        abort_unless($this->puedeEditar, 403);
+        $this->authorize('update', $this->cliente);
 
         $this->validate([
-            'equipo_contrato_id' => ['required', 'exists:contratos,id'],
+            'equipo_contrato_id' => [
+                'required',
+                Rule::exists('contratos', 'id')->where('cliente_id', $this->cliente->id),
+            ],
             'equipo_tipo' => ['required', 'string', 'max:40'],
             'equipo_modelo' => ['nullable', 'string', 'max:80'],
             'equipo_serie' => ['nullable', 'string', 'max:80'],
@@ -197,9 +205,12 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function retirarEquipo(int $id): void
     {
-        abort_unless($this->puedeEditar, 403);
+        $this->authorize('update', $this->cliente);
 
-        EquipoInstalado::whereKey($id)->update(['estado' => 'retirado']);
+        EquipoInstalado::whereKey($id)
+            ->whereHas('contrato', fn ($contrato) => $contrato->where('cliente_id', $this->cliente->id))
+            ->firstOrFail()
+            ->update(['estado' => 'retirado']);
 
         $this->recargar();
         session()->flash('mensaje', 'Equipo marcado como retirado.');

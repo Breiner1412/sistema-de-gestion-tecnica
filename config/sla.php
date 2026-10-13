@@ -68,6 +68,9 @@ return [
     'alertas' => [
         'activas' => true,
         'copia_gestion' => ['admin', 'gerente'],
+
+        // Casos listados por sección en un correo; el resto va como "y N más".
+        'max_por_correo' => 20,
     ],
 
     /*

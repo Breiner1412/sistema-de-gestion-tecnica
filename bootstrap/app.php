@@ -15,6 +15,21 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRole::class,
         ]);
+
+        // En el grupo web va también en /livewire/update y en la cola del
+        // celular: una cuenta desactivada se queda fuera en la siguiente petición.
+        $middleware->appendToGroup('web', \App\Http\Middleware\CuentaActiva::class);
+
+        // Proxy de confianza: Caddy, con IP fija 172.30.0.2 en la red "proxy".
+        // La IP vive en config/trustedproxy.php y no aquí a propósito: este
+        // bloque corre antes de que Laravel cargue el .env, así que un
+        // TRUSTED_PROXIES escrito en el .env se ignoraría en silencio. El
+        // middleware lee la configuración en cada petición. Aquí se fijan las
+        // cabeceras que manda Caddy; el resto (ELB, prefijo) no se acepta.
+        $middleware->trustProxies(headers: Request::HEADER_X_FORWARDED_FOR
+            | Request::HEADER_X_FORWARDED_HOST
+            | Request::HEADER_X_FORWARDED_PORT
+            | Request::HEADER_X_FORWARDED_PROTO);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         // Ojo: definir esto REEMPLAZA el criterio por defecto de Laravel, que es

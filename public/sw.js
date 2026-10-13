@@ -9,13 +9,20 @@
  *
  * Reglas:
  *  - solo GET del mismo origen; todo lo demás va derecho a la red;
+ *  - solo se guardan las páginas de /campo. Antes se guardaba cualquier
+ *    página que se abriera (clientes, usuarios, órdenes de otros), y quedaban
+ *    en el teléfono después de cerrar sesión;
  *  - las páginas se piden primero a la red y solo se sirve la copia guardada
  *    si la red falla, para que nunca se vea una ruta de ayer estando en línea;
- *  - los archivos con huella (los de Vite) se sirven de caché, que para eso
- *    llevan la huella en el nombre.
+ *  - una redirección no se guarda: con la sesión caducada, /campo redirige al
+ *    login y esa respuesta pisaba la copia buena de la ruta;
+ *  - los archivos con huella (los de Vite) y los íconos se sirven de caché;
+ *    las fotos y firmas no, porque son privadas y van por ruta autenticada;
+ *  - al cerrar sesión, la página de entrada borra estas copias (ver
+ *    limpiarCopiasDeCampo en layouts/guest y welcome).
  */
 
-const CACHE = 'sgt-campo-v1'
+const CACHE = 'sgt-campo-v2'
 
 const RESPALDO = `<!DOCTYPE html>
 <html lang="es"><head><meta charset="utf-8">
@@ -29,10 +36,16 @@ display:grid;place-items:center;height:100vh;margin:0;text-align:center;padding:
 teléfono, así que no hay copia guardada. Vuelve a intentarlo cuando tengas señal.</p>
 </div></body></html>`
 
+const esDeCampo = (url) => url.pathname === '/campo' || url.pathname.startsWith('/campo/')
+
+const esRecursoConHuella = (url) => /^\/(build|iconos)\//.test(url.pathname)
+
 self.addEventListener('install', (evento) => {
     evento.waitUntil(self.skipWaiting())
 })
 
+// Al activarse borra las versiones anteriores: la v1 guardaba páginas de toda
+// la aplicación y las fotos de /storage.
 self.addEventListener('activate', (evento) => {
     evento.waitUntil(
         caches
@@ -40,6 +53,12 @@ self.addEventListener('activate', (evento) => {
             .then((nombres) => Promise.all(nombres.filter((n) => n !== CACHE).map((n) => caches.delete(n))))
             .then(() => self.clients.claim()),
     )
+})
+
+self.addEventListener('message', (evento) => {
+    if (evento.data?.tipo === 'limpiar') {
+        evento.waitUntil(caches.delete(CACHE))
+    }
 })
 
 self.addEventListener('fetch', (evento) => {
@@ -50,8 +69,12 @@ self.addEventListener('fetch', (evento) => {
         return
     }
 
-    // Las páginas: red primero, copia guardada como red de seguridad.
+    // Las páginas de campo: red primero, copia guardada como red de seguridad.
     if (peticion.mode === 'navigate') {
+        if (!esDeCampo(url)) {
+            return
+        }
+
         evento.respondWith(
             fetch(peticion)
                 .then((respuesta) => {
@@ -72,8 +95,8 @@ self.addEventListener('fetch', (evento) => {
         return
     }
 
-    // Recursos: caché primero, y de paso se refresca en segundo plano.
-    if (/\/(build|iconos|storage)\//.test(url.pathname)) {
+    // Recursos con huella: caché primero, y de paso se refresca en segundo plano.
+    if (esRecursoConHuella(url)) {
         evento.respondWith(
             caches.match(peticion).then((guardada) => {
                 const desdeLaRed = fetch(peticion)
@@ -91,8 +114,8 @@ self.addEventListener('fetch', (evento) => {
 })
 
 function guardar(peticion, respuesta) {
-    // Las respuestas parciales o de error no sirven de copia de seguridad.
-    if (!respuesta.ok || respuesta.status === 206) {
+    // Las respuestas parciales, de error o redirigidas no sirven de copia.
+    if (!respuesta.ok || respuesta.status === 206 || respuesta.redirected) {
         return
     }
 

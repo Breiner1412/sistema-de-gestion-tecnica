@@ -25,6 +25,8 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function mount(): void
     {
+        $this->authorize('viewAny', Cliente::class);
+
         $this->minimo = (int) config('sla.recurrencia.minimo_en_ventana_larga', 3);
     }
 
@@ -74,10 +76,14 @@ new #[Layout('layouts.app')] class extends Component {
         ];
     }
 
-    /** Mismo criterio que la tabla, sin paginar. */
+    /** Mismo criterio que la tabla, sin paginar. El motivo se filtra en SQL. */
     private function consulta()
     {
-        return Cliente::recurrentes((int) $this->meses, $this->minimo)
+        $motivo = in_array($this->motivo, [Cliente::MOTIVO_FALLA, Cliente::MOTIVO_SIN_CONTACTO], true)
+            ? $this->motivo
+            : null;
+
+        return Cliente::recurrentes((int) $this->meses, $this->minimo, $motivo)
             ->orderByDesc('reportes')
             ->orderByDesc('ultimo_reporte');
     }
@@ -92,6 +98,8 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function exportar()
     {
+        $this->authorize('viewAny', Cliente::class);
+
         $filas = $this->consulta()->get()
             ->map(fn($c) => [
                 $c->codigo_abonado,
@@ -104,11 +112,7 @@ new #[Layout('layouts.app')] class extends Component {
                 $this->motivoDe($c) === Cliente::MOTIVO_SIN_CONTACTO ? 'No se logra contactar' : 'Falla recurrente',
                 $c->primer_reporte,
                 $c->ultimo_reporte,
-            ])
-            ->when($this->motivo, fn($filas) => $filas->where(
-                7,
-                $this->motivo === Cliente::MOTIVO_SIN_CONTACTO ? 'No se logra contactar' : 'Falla recurrente',
-            ));
+            ]);
 
         return ExportadorCsv::descargar(
             ExportadorCsv::nombre('abonados-recurrentes'),
@@ -130,10 +134,6 @@ new #[Layout('layouts.app')] class extends Component {
 
             return $cliente;
         });
-
-        if ($this->motivo) {
-            $pagina->setCollection($pagina->getCollection()->where('motivo', $this->motivo)->values());
-        }
 
         return ['clientes' => $pagina];
     }

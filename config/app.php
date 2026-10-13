@@ -65,7 +65,10 @@ return [
     |
     */
 
-    'timezone' => 'UTC',
+    // La jornada del SLA (7 a 18), el "hoy" de la ruta del técnico y los
+    // cortes del informe mensual se leen en esta zona. Con UTC, la jornada
+    // corría de 2 a 13 hora de Colombia.
+    'timezone' => env('APP_TIMEZONE', 'America/Bogota'),
 
     /*
     |--------------------------------------------------------------------------

@@ -12,6 +12,11 @@ new #[Layout('layouts.app')] class extends Component {
     #[Url(except: '')]
     public string $estado = '';
 
+    public function mount(): void
+    {
+        $this->authorize('viewAny', OrdenTrabajo::class);
+    }
+
     public function updated($propiedad): void
     {
         if ($propiedad !== 'page') {
@@ -27,9 +32,10 @@ new #[Layout('layouts.app')] class extends Component {
             ->with(['soporte.cliente:id,nombre,codigo_abonado', 'tecnico.user:id,name'])
             ->when($this->estado, fn($q) => $q->where('estado', $this->estado));
 
-        // El técnico de campo solo ve sus propias visitas.
-        if ($usuario->tieneRol(\App\Models\User::ROL_TECNICO_CAMPO) && $usuario->tecnico) {
-            $query->where('tecnico_id', $usuario->tecnico->id);
+        // El técnico de campo solo ve sus propias visitas. Sin ficha de técnico
+        // no ve ninguna: antes, en ese caso, veía las de todos.
+        if ($usuario->tieneRol(\App\Models\User::ROL_TECNICO_CAMPO)) {
+            $query->delTecnicoUsuario($usuario);
         }
 
         return [

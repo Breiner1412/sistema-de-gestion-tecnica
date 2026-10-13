@@ -1,0 +1,31 @@
+# Lo que nunca entra a la imagen.
+
+# Secretos y datos locales
+.env
+.env.*
+db_gestion.sql
+*.sql
+Claude outputs/
+auth.json
+
+# Se reconstruyen dentro de la imagen
+vendor/
+node_modules/
+public/build/
+public/hot
+public/storage
+
+# Estado de ejecución: storage/ se crea vacío en la imagen
+storage/
+bootstrap/cache/*.php
+
+# Desarrollo
+.git/
+.github/
+.idea/
+.vscode/
+.phpunit.cache/
+.phpunit.result.cache
+tests/
+docker-compose*.yml
+Dockerfile

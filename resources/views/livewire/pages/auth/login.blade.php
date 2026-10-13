@@ -1,6 +1,7 @@
 <?php
 
 use App\Livewire\Forms\LoginForm;
+use App\Support\ModoDemo;
 use Illuminate\Support\Facades\Session;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
@@ -22,9 +23,46 @@ new #[Layout('layouts.guest')] class extends Component
 
         $this->redirectIntended(default: route('dashboard', absolute: false), navigate: true);
     }
+
+    public function with(): array
+    {
+        return [
+            'cuentasDemo' => ModoDemo::cuentasPublicas(),
+            'claveDemo' => config('demo.password'),
+            'horaReinicio' => config('demo.reinicio.hora'),
+        ];
+    }
 }; ?>
 
 <div>
+    @if ($cuentasDemo->isNotEmpty() && filled($claveDemo))
+        <div class="mb-6 rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+            <p class="font-semibold">Demo pública</p>
+            <p class="mt-1">
+                Entre con cualquiera de estas cuentas. La contraseña es
+                <code class="rounded bg-white px-1 font-mono">{{ $claveDemo }}</code>.
+            </p>
+
+            <ul class="mt-3 space-y-1">
+                @foreach ($cuentasDemo as $cuenta)
+                    <li>
+                        <button type="button"
+                                class="text-left underline hover:text-blue-700"
+                                x-on:click="$wire.set('form.email', @js($cuenta->email)); $wire.set('form.password', @js($claveDemo))">
+                            {{ $cuenta->etiquetaRol() }}
+                        </button>
+                        <span class="text-blue-700">· {{ $cuenta->email }}</span>
+                    </li>
+                @endforeach
+            </ul>
+
+            <p class="mt-3 text-blue-800">
+                Los datos se reinician todas las noches a las {{ $horaReinicio }} (hora de Colombia):
+                lo que haga aquí no dura más de un día, y a esa hora se cierran todas las sesiones.
+            </p>
+        </div>
+    @endif
+
     <!-- Session Status -->
     <x-auth-session-status class="mb-4" :status="session('status')" />
 

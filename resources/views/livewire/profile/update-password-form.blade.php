@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\ModoDemo;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
@@ -17,6 +18,8 @@ new class extends Component
      */
     public function updatePassword(): void
     {
+        abort_if(ModoDemo::protege(Auth::user()), 403, 'En la demo no se puede cambiar la contraseña de las cuentas de prueba.');
+
         try {
             $validated = $this->validate([
                 'current_password' => ['required', 'string', 'current_password'],

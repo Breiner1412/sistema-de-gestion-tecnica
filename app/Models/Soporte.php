@@ -1,13 +1,15 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
-use App\Exceptions\TransicionInvalidaException;
 use App\Models\Concerns\GestionaSla;
+use App\Models\Concerns\MaquinaDeEstados;
+use App\Models\Concerns\NumeraCasos;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Un caso de soporte.
@@ -19,7 +21,7 @@ use Illuminate\Support\Facades\DB;
  */
 class Soporte extends Model
 {
-    use GestionaSla, SoftDeletes;
+    use GestionaSla, MaquinaDeEstados, NumeraCasos, SoftDeletes;
 
     /* ---------------------------------------------------------------
      | Estados
@@ -222,20 +224,6 @@ class Soporte extends Model
         });
     }
 
-    public static function siguienteNumero(): string
-    {
-        $anio = now()->year;
-
-        $ultimo = static::withTrashed()
-            ->where('numero_soporte', 'like', "SGT-{$anio}-%")
-            ->orderByDesc('numero_soporte')
-            ->value('numero_soporte');
-
-        $consecutivo = $ultimo ? ((int) substr($ultimo, -6)) + 1 : 1;
-
-        return sprintf('SGT-%d-%06d', $anio, $consecutivo);
-    }
-
     /**
      * La criticidad no la escoge el asesor: sale de si el servicio está caído.
      * Criterio de la operación: sin internet, sin TV o sin ambos es inmediato;
@@ -273,92 +261,6 @@ class Soporte extends Model
         $this->save();
 
         $this->registrarEnHistorial($this->estado, $this->estado, "Criticidad elevada a inmediata: {$motivo}", $usuarioId);
-    }
-
-    /* ---------------------------------------------------------------
-     | Transiciones
-     * --------------------------------------------------------------- */
-
-    public function puedeTransicionarA(string $estado): bool
-    {
-        return in_array($estado, self::TRANSICIONES[$this->estado] ?? [], true);
-    }
-
-    /** @return array<int, string> */
-    public function transicionesDisponibles(): array
-    {
-        return self::TRANSICIONES[$this->estado] ?? [];
-    }
-
-    /**
-     * Único camino para mover un caso. Valida la transición, ajusta el reloj,
-     * calcula métricas y deja rastro en el historial.
-     *
-     * @throws TransicionInvalidaException
-     */
-    public function cambiarEstado(string $nuevoEstado, ?string $motivo = null, ?int $usuarioId = null): void
-    {
-        $anterior = $this->estado;
-
-        if ($anterior === $nuevoEstado) {
-            return;
-        }
-
-        if (!$this->puedeTransicionarA($nuevoEstado)) {
-            throw TransicionInvalidaException::para($anterior, $nuevoEstado);
-        }
-
-        $usuarioId ??= auth()->id();
-
-        DB::transaction(function () use ($nuevoEstado, $anterior, $motivo, $usuarioId) {
-            $cambios = ['estado' => $nuevoEstado];
-
-            if ($nuevoEstado === self::ESTADO_CANCELADO) {
-                $cambios['motivo_cancelacion'] = $motivo;
-            }
-
-            if (in_array($nuevoEstado, self::ESTADOS_FINALES, true) && !$this->fecha_cierre) {
-                $cambios['fecha_cierre'] = now();
-                $cambios['tiempo_resolucion'] = $this->calendario()->minutosEntre($this->created_at, now());
-            }
-
-            // Reabrir un caso cerrado devuelve el reloj a cero desde ahora.
-            if (in_array($anterior, self::ESTADOS_FINALES, true) && $nuevoEstado === self::ESTADO_EN_PROCESO) {
-                $cambios['fecha_cierre'] = null;
-                $cambios['tiempo_resolucion'] = null;
-            }
-
-            $this->fill($cambios);
-
-            // El reloj del nivel 2 solo corre mientras el caso es suyo.
-            if (in_array($nuevoEstado, self::ESTADOS_QUE_PAUSAN_SLA, true)) {
-                $this->pausarSla();
-            } elseif (in_array($anterior, self::ESTADOS_QUE_PAUSAN_SLA, true)) {
-                $this->reanudarSla();
-            }
-
-            $this->save();
-
-            $this->registrarEnHistorial($anterior, $nuevoEstado, $motivo, $usuarioId);
-        });
-    }
-
-    /**
-     * Sin usuario ni sesión detrás, la transición la hizo el sistema
-     * (por ejemplo el job de reintentos) y así queda marcada en el historial.
-     */
-    private function registrarEnHistorial(?string $anterior, string $nuevo, ?string $motivo, ?int $usuarioId): void
-    {
-        $autor = $usuarioId ?? auth()->id();
-
-        SoporteHistorialEstado::create([
-            'soporte_id' => $this->id,
-            'estado_anterior' => $anterior,
-            'estado_nuevo' => $nuevo,
-            'usuario_id' => $autor,
-            'motivo' => $motivo,
-            'automatico' => $autor === null,
-        ]);
     }
 
     /* ---------------------------------------------------------------

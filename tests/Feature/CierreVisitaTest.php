@@ -12,58 +12,8 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 beforeEach(function () {
-    Storage::fake('public');
+    Storage::fake('local');
 });
-
-/*
- * Imágenes de verdad, minúsculas y escritas a mano: no se genera nada con GD
- * para que las pruebas no dependan de una extensión instalada.
- */
-const PNG_MINIMO = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAFUlEQVR4nGNkYGD4z4AEmBjQAGEBAEEUAQeklUeXAAAAAElFTkSuQmCC';
-
-const JPEG_MINIMO = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAAEAAQDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAn/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFAEBAAAAAAAAAAAAAAAAAAAAAP/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/AJ//2Q==';
-
-/** Lo que manda el teléfono es una data URL en base64, no una ruta. */
-function fotoDePrueba(): string
-{
-    return 'data:image/jpeg;base64,'.JPEG_MINIMO;
-}
-
-/** Una visita programada, con su técnico y su caso ya enviado a terreno. */
-function visitaDePrueba(?User $usuario = null, array $atributos = []): OrdenTrabajo
-{
-    $usuario ??= usuarioCon(User::ROL_TECNICO_CAMPO, 'Técnico de campo');
-
-    $tecnico = Tecnico::create([
-        'user_id' => $usuario->id,
-        'nombre' => $usuario->name,
-        'estado' => 'activo',
-    ]);
-
-    $soporte = soporteDePrueba();
-    $soporte->cambiarEstado(Soporte::ESTADO_EN_PROCESO);
-    $soporte->cambiarEstado(Soporte::ESTADO_ENVIADO_TECNICO, 'Se agenda visita en terreno.');
-
-    return OrdenTrabajo::create(array_merge([
-        'soporte_id' => $soporte->id,
-        'tecnico_id' => $tecnico->id,
-        'tipo' => 'revision',
-        'estado' => OrdenTrabajo::ESTADO_PROGRAMADA,
-        'fecha_programada' => today(),
-        'franja' => 'manana',
-    ], $atributos));
-}
-
-/** @return array<string, mixed> */
-function cierreCompleto(array $extra = []): array
-{
-    return array_merge([
-        'uuid' => (string) Str::uuid(),
-        'estado' => OrdenTrabajo::ESTADO_COMPLETADO,
-        'diagnostico_id' => diagnosticoDePrueba()->id,
-        'observaciones' => 'Se cambió el conector de la acometida y quedó en -18 dBm.',
-    ], $extra);
-}
 
 it('cierra la visita y el caso en el mismo envío', function () {
     $usuario = usuarioCon(User::ROL_TECNICO_CAMPO, 'Andrés Loaiza');
@@ -98,7 +48,7 @@ it('guarda la foto y la firma en disco, no en la tabla', function () {
     $visita->refresh();
 
     expect($visita->firma_path)->toStartWith('firmas/')
-        ->and(Storage::disk('public')->exists($visita->firma_path))->toBeTrue();
+        ->and(Storage::disk('local')->exists($visita->firma_path))->toBeTrue();
 
     $evidencias = Evidencia::where('orden_id', $visita->id)->get();
 
@@ -106,7 +56,7 @@ it('guarda la foto y la firma en disco, no en la tabla', function () {
         ->and($evidencias->first()->descripcion)->toBe('Acometida');
 
     foreach ($evidencias as $evidencia) {
-        expect(Storage::disk('public')->exists($evidencia->archivo_url))->toBeTrue();
+        expect(Storage::disk('local')->exists($evidencia->archivo_url))->toBeTrue();
     }
 });
 
@@ -331,4 +281,14 @@ it('no pisa la hora de inicio si la visita ya estaba en progreso', function () {
     $this->actingAs($usuario)->postJson(route('campo.iniciar', $visita))->assertOk();
 
     expect($visita->refresh()->hora_inicio->diffInMinutes($inicio, absolute: true))->toBeLessThan(2);
+});
+
+it('la pantalla de campo dice de quién es la sesión, para que la cola no mezcle cierres', function () {
+    $usuario = usuarioCon(User::ROL_TECNICO_CAMPO);
+    $visita = visitaDePrueba($usuario);
+
+    $this->actingAs($usuario)
+        ->get(route('campo.visita', $visita))
+        ->assertOk()
+        ->assertSee('<meta name="usuario-id" content="'.$usuario->id.'">', false);
 });

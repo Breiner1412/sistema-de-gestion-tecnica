@@ -18,7 +18,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
 
 /**
- * Datos de demostración. No debe ejecutarse en producción.
+ * Datos de demostración. En producción solo corre con DEMO_MODE=true.
  *
  * Todos los clientes son SINTÉTICOS: nombres, cédulas y teléfonos inventados.
  * Lo que se conserva del caso real son las proporciones — qué porcentaje de
@@ -56,6 +56,63 @@ class DemoSeeder extends Seeder
         $clientes = $this->clientes();
         $this->inventario();
         $this->casos($clientes);
+        $this->visitasDeCampo($clientes);
+    }
+
+    /**
+     * La pantalla de campo es de lo que más se luce en la demo, y con el azar
+     * de casos() podía quedar vacía: bastaba que ningún caso abierto cayera en
+     * la rama de la visita. Cada técnico de campo arranca con una visita para
+     * hoy y otra para mañana. Como la demo se reinicia cada noche, "hoy"
+     * siempre es hoy.
+     */
+    private function visitasDeCampo($clientes): void
+    {
+        $nivel2 = User::where('rol', User::ROL_TECNICO_SOPORTE)->orderBy('id')->value('id');
+        $asesor = User::where('rol', User::ROL_CALL_CENTER)->orderBy('id')->value('id');
+
+        if (! $nivel2 || ! $asesor) {
+            return;
+        }
+
+        foreach (Tecnico::orderBy('id')->get() as $i => $tecnico) {
+            foreach ([today(), today()->addDay()] as $j => $dia) {
+                $yaTiene = OrdenTrabajo::where('tecnico_id', $tecnico->id)->abiertas()->delDia($dia)->exists();
+
+                if ($yaTiene) {
+                    continue;
+                }
+
+                $soporte = new Soporte([
+                    'cliente_id' => $clientes[($i * 2 + $j) % $clientes->count()]->id,
+                    'tipo_solicitud' => Soporte::TIPO_SIN_INTERNET,
+                    'canal_ingreso' => Soporte::CANAL_CALL_CENTER,
+                    'servicio_afectado' => 'internet',
+                    'usuario_registra_id' => $asesor,
+                    'descripcion' => $this->descripcion(Soporte::TIPO_SIN_INTERNET, null),
+                    'estado' => Soporte::ESTADO_PENDIENTE,
+                ]);
+                $soporte->created_at = $this->momentoHabilAleatorio(1);
+                $soporte->save();
+
+                $soporte->asignarTecnicoSoporte($nivel2, $nivel2);
+
+                OrdenTrabajo::create([
+                    'soporte_id' => $soporte->id,
+                    'tecnico_id' => $tecnico->id,
+                    'tipo' => 'revision',
+                    'estado' => OrdenTrabajo::ESTADO_PROGRAMADA,
+                    'fecha_programada' => $dia->toDateString(),
+                    'franja' => $j === 0 ? 'manana' : 'tarde',
+                ]);
+
+                $soporte->cambiarEstado(
+                    Soporte::ESTADO_ENVIADO_TECNICO,
+                    "Visita programada para el {$dia->format('d/m/Y')}.",
+                    $nivel2,
+                );
+            }
+        }
     }
 
     /* ---------------------------------------------------------------
@@ -165,7 +222,11 @@ class DemoSeeder extends Seeder
 
         for ($i = 0; $i < 90; $i++) {
             $tipo = $this->elegir(self::MEZCLA_TIPOS);
-            $creado = $this->momentoHabilAleatorio(mt_rand(1, 55));
+            $desenlace = $this->elegir(self::MEZCLA_CIERRES);
+
+            // Los abiertos son de los últimos días hábiles: con meses encima,
+            // todos saldrían vencidos y el semáforo no mostraría nada más.
+            $creado = $this->momentoHabilAleatorio($desenlace === 'abierto' ? mt_rand(1, 6) : mt_rand(1, 55));
             $cliente = $clientes->random();
 
             $esSoporte = in_array($tipo, [Soporte::TIPO_SOPORTE_REMOTO, Soporte::TIPO_SIN_INTERNET], true);
@@ -192,7 +253,6 @@ class DemoSeeder extends Seeder
             $soporte->updated_at = $creado;
             $soporte->save();
 
-            $desenlace = $this->elegir(self::MEZCLA_CIERRES);
             $tecnico = $tecnicosPonderados[array_rand($tecnicosPonderados)];
 
             $desenlace === 'abierto'

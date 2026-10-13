@@ -1,9 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
+use App\Exceptions\TransicionInvalidaException;
 use App\Models\Soporte;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -52,12 +56,22 @@ class ReintentarContacto extends Command
                     continue;
                 }
 
-                if ($agotado) {
-                    $this->cerrar($caso, $maximo);
-                    $cerrados++;
-                } else {
-                    $this->devolver($caso, $maximo);
-                    $devueltos++;
+                // Un caso que alguien movió a mano mientras tanto no puede
+                // frenar a los demás cada cuarto de hora: se anota y se sigue.
+                try {
+                    if ($agotado) {
+                        $this->cerrar($caso, $maximo);
+                        $cerrados++;
+                    } else {
+                        $this->devolver($caso, $maximo);
+                        $devueltos++;
+                    }
+                } catch (TransicionInvalidaException $e) {
+                    Log::warning('soportes:reintentar-contacto omitió un caso', [
+                        'soporte_id' => $caso->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                    $this->warn("  {$caso->numero_soporte}: {$e->getMessage()}");
                 }
             }
         });
@@ -93,23 +107,34 @@ class ReintentarContacto extends Command
     {
         $siguiente = $caso->intentos_contacto + 1;
 
-        // Sin usuario: la transición queda marcada como automática.
-        $caso->cambiarEstado(
+        $this->mover(
+            $caso,
             Soporte::ESTADO_EN_PROCESO,
             "Reintento programado: toca volver a contactar al cliente (intento {$siguiente} de {$maximo}).",
         );
-
-        // Se limpia para no volver a tomarlo hasta que alguien marque otro fallo.
-        $caso->forceFill(['proximo_intento_at' => null])->saveQuietly();
     }
 
     private function cerrar(Soporte $caso, int $maximo): void
     {
-        $caso->cambiarEstado(
+        $this->mover(
+            $caso,
             Soporte::ESTADO_CERRADO_SIN_CONTACTO,
             "Cerrado automáticamente tras {$maximo} intentos de contacto sin respuesta.",
         );
+    }
 
-        $caso->forceFill(['proximo_intento_at' => null])->saveQuietly();
+    /**
+     * La transición y la limpieza del reintento van juntas: si una falla, no
+     * queda un caso en proceso con un reintento todavía programado.
+     */
+    private function mover(Soporte $caso, string $estado, string $motivo): void
+    {
+        DB::transaction(function () use ($caso, $estado, $motivo) {
+            // Sin usuario: la transición queda marcada como automática.
+            $caso->cambiarEstado($estado, $motivo);
+
+            // Se limpia para no volver a tomarlo hasta que alguien marque otro fallo.
+            $caso->forceFill(['proximo_intento_at' => null])->saveQuietly();
+        });
     }
 }

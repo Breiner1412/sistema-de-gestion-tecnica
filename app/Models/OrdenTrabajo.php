@@ -1,11 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Facades\Storage;
 
 class OrdenTrabajo extends Model
 {
@@ -108,7 +109,7 @@ class OrdenTrabajo extends Model
 
     public function urlFirma(): ?string
     {
-        return $this->firma_path ? Storage::disk('public')->url($this->firma_path) : null;
+        return $this->firma_path ? route('ordenes.firma', $this) : null;
     }
 
     public function etiquetaEstado(): string
@@ -133,7 +134,18 @@ class OrdenTrabajo extends Model
 
     public function scopeDelDia(Builder $query, $fecha = null): Builder
     {
-        return $query->whereDate('fecha_programada', $fecha ?? today());
+        return $query->delDiaEn('fecha_programada', $fecha ?? today());
+    }
+
+    /**
+     * Un día como rango y no con whereDate(): DATE(columna) = ? obliga a MySQL a
+     * recorrer la tabla sin usar el índice (estado, fecha_programada).
+     */
+    public function scopeDelDiaEn(Builder $query, string $columna, $fecha): Builder
+    {
+        $dia = \Illuminate\Support\Carbon::parse($fecha);
+
+        return $query->whereBetween($columna, [$dia->copy()->startOfDay(), $dia->copy()->endOfDay()]);
     }
 
     /** Visitas de un técnico, recibiendo el usuario y no la ficha de técnico. */

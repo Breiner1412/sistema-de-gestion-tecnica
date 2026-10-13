@@ -163,3 +163,98 @@ it('no hace nada si las alertas están desactivadas', function () {
 
     Notification::assertNothingSent();
 });
+
+it('si el correo no sale tras los reintentos, el caso vuelve a quedar por avisar', function () {
+    $tecnico = usuarioCon(User::ROL_TECNICO_SOPORTE, 'Andrés Loaiza');
+    $caso = casoConVencimiento(now()->addMinutes(10), $tecnico);
+
+    $this->artisan('soportes:alertar-sla')->assertSuccessful();
+    expect($caso->refresh()->alerta_sla_nivel)->toBe('riesgo');
+
+    // El trabajo de la cola agota sus intentos (SMTP caído).
+    $notificacion = new CasosEnRiesgoDeSla(collect(), collect([$caso]));
+    $notificacion->failed(new RuntimeException('SMTP caído'));
+
+    expect($caso->refresh()->alerta_sla_nivel)->toBeNull();
+
+    $this->artisan('soportes:alertar-sla')->assertSuccessful();
+
+    Notification::assertSentToTimes($tecnico, CasosEnRiesgoDeSla::class, 2);
+    expect($caso->refresh()->alerta_sla_nivel)->toBe('riesgo');
+});
+
+it('desmarcar un correo fallido no pisa un aviso más nuevo del mismo caso', function () {
+    $caso = casoConVencimiento(now()->subMinutes(10));
+    $caso->forceFill(['alerta_sla_nivel' => 'vencido'])->saveQuietly();
+
+    // Falla un correo viejo que había avisado el riesgo.
+    (new CasosEnRiesgoDeSla(collect(), collect([$caso])))->failed(new RuntimeException('x'));
+
+    expect($caso->refresh()->alerta_sla_nivel)->toBe('vencido');
+});
+
+it('la notificación reintenta con espera antes de rendirse', function () {
+    $notificacion = new CasosEnRiesgoDeSla(collect(), collect());
+
+    expect($notificacion->tries)->toBe(3)
+        ->and($notificacion->backoff)->toBe([60, 300])
+        ->and($notificacion)->toBeInstanceOf(\Illuminate\Contracts\Queue\ShouldQueue::class);
+});
+
+it('un correo con muchos casos lista los primeros y resume el resto', function () {
+    config(['sla.alertas.max_por_correo' => 3]);
+    $tecnico = usuarioCon(User::ROL_TECNICO_SOPORTE);
+    $casos = collect(range(1, 5))->map(fn () => casoConVencimiento(now()->subMinute(), $tecnico));
+
+    $correo = (new CasosEnRiesgoDeSla($casos, collect()))->toMail($tecnico);
+    $lineas = collect($correo->introLines);
+
+    expect($lineas->filter(fn ($l) => str_ends_with($l, '· vencido'))->count())->toBe(3)
+        ->and($lineas->contains('… y 2 más en la bandeja.'))->toBeTrue();
+});
+
+it('la cola se vigila y una cola atascada deja un error en el registro', function () {
+    $evento = collect(app(\Illuminate\Console\Scheduling\Schedule::class)->events())
+        ->first(fn ($e) => str_contains($e->command, 'queue:monitor'));
+
+    expect($evento)->not->toBeNull();
+
+    \Illuminate\Support\Facades\Log::spy();
+    event(new \Illuminate\Queue\Events\QueueBusy('database', 'default', 80));
+
+    \Illuminate\Support\Facades\Log::shouldHaveReceived('error')->withArgs(fn ($mensaje) => $mensaje === 'Cola atascada');
+});
+
+it('un caso reabierto arranca un SLA nuevo y vuelve a avisar', function () {
+    $tecnico = usuarioCon(User::ROL_TECNICO_SOPORTE);
+    $caso = casoConVencimiento(now()->subMinutes(10), $tecnico);
+
+    $this->artisan('soportes:alertar-sla')->assertSuccessful();
+    expect($caso->refresh()->alerta_sla_nivel)->toBe('vencido');
+
+    $caso->cerrar(diagnosticoDePrueba()->id, 'Se ajustó el equipo.', $tecnico->id);
+    $caso->cambiarEstado(Soporte::ESTADO_EN_PROCESO, 'El abonado vuelve a reportar.', $tecnico->id);
+    $caso->refresh();
+
+    expect($caso->alerta_sla_nivel)->toBeNull()
+        ->and($caso->sla_vence_at->isFuture())->toBeTrue();
+});
+
+it('al reanudar el reloj tras una pausa se puede volver a avisar', function () {
+    $caso = casoConVencimiento(now()->addMinutes(10));
+    $caso->forceFill(['alerta_sla_nivel' => 'riesgo'])->saveQuietly();
+
+    $caso->pausarSla();
+    $caso->reanudarSla();
+
+    expect($caso->alerta_sla_nivel)->toBeNull();
+});
+
+it('elevar la criticidad reinicia el SLA y sus avisos', function () {
+    $caso = casoConVencimiento(now()->subMinutes(10));
+    $caso->forceFill(['alerta_sla_nivel' => 'vencido'])->saveQuietly();
+
+    $caso->elevarCriticidad('Cliente corporativo sin servicio.');
+
+    expect($caso->refresh()->alerta_sla_nivel)->toBeNull();
+});

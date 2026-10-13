@@ -1,7 +1,6 @@
 <?php
 
 use App\Models\Cliente;
-use App\Models\User;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
@@ -21,10 +20,9 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function mount(?Cliente $cliente = null): void
     {
-        abort_unless(
-            auth()->user()->tieneRol(User::ROL_ADMIN, User::ROL_GERENTE, User::ROL_CALL_CENTER),
-            403
-        );
+        $cliente?->exists
+            ? $this->authorize('update', $cliente)
+            : $this->authorize('create', Cliente::class);
 
         if ($cliente?->exists) {
             $this->cliente = $cliente;
@@ -45,6 +43,10 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function guardar()
     {
+        $this->cliente
+            ? $this->authorize('update', $this->cliente)
+            : $this->authorize('create', Cliente::class);
+
         $datos = $this->validate([
             'codigo_abonado' => ['nullable', 'string', 'max:30', Rule::unique('clientes')->ignore($this->cliente)],
             'cedula' => ['required', 'string', 'max:30', Rule::unique('clientes')->ignore($this->cliente)],

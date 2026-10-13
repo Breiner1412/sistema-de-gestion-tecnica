@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use App\Support\ModoDemo;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Validation\Rule;
@@ -26,6 +27,9 @@ new class extends Component
     public function updateProfileInformation(): void
     {
         $user = Auth::user();
+
+        // El nombre también: lo ven todos los visitantes en casos e informes.
+        abort_if(ModoDemo::protege($user), 403, 'En la demo los datos de las cuentas de prueba no se pueden cambiar.');
 
         $validated = $this->validate([
             'name' => ['required', 'string', 'max:255'],

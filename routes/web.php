@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CierreVisitaController;
+use App\Http\Controllers\EvidenciaController;
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
 
@@ -37,6 +38,10 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware('role:admin,gerente,call_center,tecnico_soporte,ingeniero_redes,tecnico_campo')->group(function () {
         Volt::route('/ordenes', 'ordenes.index')->name('ordenes.index');
         Volt::route('/ordenes/{orden}', 'ordenes.show')->name('ordenes.show');
+
+        // Fotos y firma: archivos privados, con la misma política que la visita.
+        Route::get('/ordenes/{orden}/firma', [EvidenciaController::class, 'firma'])->name('ordenes.firma');
+        Route::get('/evidencias/{evidencia}', [EvidenciaController::class, 'foto'])->name('evidencias.ver');
     });
 
     // Pantalla de campo. Va aparte de /ordenes porque el técnico la usa con una
@@ -46,11 +51,14 @@ Route::middleware(['auth'])->group(function () {
         Volt::route('/campo', 'campo.ruta')->name('campo.ruta');
         Volt::route('/campo/visitas/{orden}', 'campo.visita')->name('campo.visita');
 
-        // Estas dos las llama el JavaScript de la cola, no un formulario.
-        Route::post('/campo/visitas/{orden}/inicio', [CierreVisitaController::class, 'iniciar'])
-            ->name('campo.iniciar');
-        Route::post('/campo/visitas/{orden}/cierre', [CierreVisitaController::class, 'cerrar'])
-            ->name('campo.cerrar');
+        // Estas dos las llama el JavaScript de la cola, no un formulario. Un
+        // cierre puede pesar decenas de MB en fotos: con límite por usuario.
+        Route::middleware('throttle:campo')->group(function () {
+            Route::post('/campo/visitas/{orden}/inicio', [CierreVisitaController::class, 'iniciar'])
+                ->name('campo.iniciar');
+            Route::post('/campo/visitas/{orden}/cierre', [CierreVisitaController::class, 'cerrar'])
+                ->name('campo.cerrar');
+        });
     });
 
     // Bodega.

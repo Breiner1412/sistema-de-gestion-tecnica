@@ -1,0 +1,99 @@
+# Las pruebas locales corren sobre SQLite, que no tiene YEAR(), no altera
+# claves foráneas ni restricciones CHECK y es laxo con los tipos. Producción
+# es MySQL 8: aquí se corre todo contra MySQL, además de SQLite.
+name: Pruebas
+
+on:
+  push:
+    branches: [main, auditoria]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  php:
+    runs-on: ubuntu-latest
+
+    env:
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: pruebas
+      DB_USERNAME: root
+      DB_PASSWORD: raiz
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: pruebas
+          MYSQL_ROOT_PASSWORD: raiz
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -praiz --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, pdo_sqlite, gd, intl, mbstring
+          coverage: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Dependencias
+        run: |
+          composer install --no-interaction --prefer-dist --no-progress
+          npm ci
+          npm run build
+
+      - name: Entorno
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Migraciones contra MySQL 8 (ida, vuelta completa e ida)
+        run: |
+          php artisan migrate:fresh --force
+          php artisan migrate:reset --force
+          php artisan migrate --force
+
+      - name: Pruebas contra MySQL 8
+        run: php artisan test
+
+      - name: Pruebas contra SQLite
+        env:
+          DB_CONNECTION: sqlite
+          DB_DATABASE: ':memory:'
+        run: php artisan test
+
+  js:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:js
+
+  imagen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: La imagen de Docker se construye
+        run: docker build -t soporte-gestion:ci .

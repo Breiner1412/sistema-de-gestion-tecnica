@@ -1,9 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models\Concerns;
 
 use App\Support\CalendarioHabil;
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 
 /**
  * Reloj de SLA del nivel 2, medido en tiempo hábil.
@@ -20,9 +23,17 @@ trait GestionaSla
         return CalendarioHabil::desdeConfig();
     }
 
-    /** Minutos hábiles que la operación se da para resolver este caso. */
+    /**
+     * Minutos hábiles que la operación se da para resolver este caso: los que
+     * había entre el arranque del reloj y el vencimiento. Si el caso es de
+     * antes de que se guardara, se estima desde la configuración.
+     */
     public function presupuestoSlaMinutos(): int
     {
+        if ($this->sla_presupuesto_minutos) {
+            return (int) $this->sla_presupuesto_minutos;
+        }
+
         $config = config("sla.tiempos.{$this->criticidad}", config('sla.tiempos.normal'));
 
         if (($config['unidad'] ?? 'horas') === 'dias') {
@@ -34,9 +45,14 @@ trait GestionaSla
         return (int) round($config['resolucion'] * 60);
     }
 
-    public function iniciarSla(): void
+    /**
+     * Arranca el reloj desde que entró el caso, o desde $desde cuando se
+     * reabre. Un reloj nuevo es un SLA nuevo: los avisos ya enviados no
+     * cuentan para él.
+     */
+    public function iniciarSla(?CarbonInterface $desde = null): void
     {
-        $desde = CarbonImmutable::instance($this->created_at ?? now());
+        $desde = CarbonImmutable::instance($desde ?? $this->created_at ?? now());
         $config = config("sla.tiempos.{$this->criticidad}", config('sla.tiempos.normal'));
 
         $vence = ($config['unidad'] ?? 'horas') === 'dias'
@@ -47,6 +63,9 @@ trait GestionaSla
             'sla_vence_at' => $vence,
             'sla_pausado_at' => null,
             'sla_minutos_restantes' => null,
+            'sla_presupuesto_minutos' => $this->calendario()->minutosEntre($desde, $vence),
+            'alerta_sla_nivel' => null,
+            'alerta_sla_at' => null,
         ]);
     }
 
@@ -72,6 +91,10 @@ trait GestionaSla
             'sla_vence_at' => $this->calendario()->sumarMinutos(now(), (int) $this->sla_minutos_restantes),
             'sla_pausado_at' => null,
             'sla_minutos_restantes' => null,
+            // Tras la pausa (visita, redes, cliente) el caso vuelve a ser del
+            // técnico: si está en riesgo, que se le avise otra vez.
+            'alerta_sla_nivel' => null,
+            'alerta_sla_at' => null,
         ]);
     }
 

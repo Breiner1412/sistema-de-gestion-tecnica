@@ -1,9 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Requests;
 
 use App\Models\OrdenTrabajo;
-use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -11,15 +12,10 @@ class CerrarVisitaRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        $usuario = $this->user();
         $orden = $this->route('orden');
 
-        if (! $usuario || ! $orden instanceof OrdenTrabajo) {
-            return false;
-        }
-
-        return $usuario->tieneRol(...User::ROLES_GESTION)
-            || $usuario->tecnico?->id === $orden->tecnico_id;
+        return $orden instanceof OrdenTrabajo
+            && (bool) $this->user()?->can('update', $orden);
     }
 
     /** @return array<string, mixed> */

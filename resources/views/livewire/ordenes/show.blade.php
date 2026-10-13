@@ -4,10 +4,11 @@ use App\Models\Diagnostico;
 use App\Models\Inventario;
 use App\Models\MaterialOrden;
 use App\Models\OrdenTrabajo;
-use App\Models\User;
 use App\Services\CierreDeVisita;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
@@ -25,6 +26,10 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function mount(OrdenTrabajo $orden): void
     {
+        // Antes no se comprobaba nada aquí: cualquier técnico de campo abría la
+        // visita de otro, con la dirección y el teléfono del cliente.
+        $this->authorize('view', $orden);
+
         $this->orden = $orden;
         $this->estado = $orden->estado;
         $this->observaciones = $orden->observaciones ?? '';
@@ -59,18 +64,26 @@ new #[Layout('layouts.app')] class extends Component {
     #[Computed]
     public function puedeEditar(): bool
     {
-        $usuario = auth()->user();
+        return auth()->user()->can('update', $this->orden);
+    }
 
-        if ($usuario->tieneRol(...User::ROLES_GESTION)) {
-            return true;
+    /**
+     * Una visita cerrada ya movió el caso y el inventario: reabrirla o tocar
+     * su material desde aquí descuadraba los dos sin pasar por ninguna regla.
+     */
+    private function exigirAbierta(): void
+    {
+        if (! $this->orden->refresh()->estaAbierta()) {
+            throw ValidationException::withMessages([
+                'estado' => 'La visita ya está cerrada y no se puede modificar.',
+            ]);
         }
-
-        return $usuario->tecnico?->id === $this->orden->tecnico_id;
     }
 
     public function agregarMaterial(): void
     {
-        abort_unless($this->puedeEditar, 403);
+        $this->authorize('update', $this->orden);
+        $this->exigirAbierta();
 
         $this->validate([
             'material_id' => 'required|exists:inventario,id',
@@ -78,12 +91,13 @@ new #[Layout('layouts.app')] class extends Component {
         ]);
 
         // Si no hay stock, el observer lanza ValidationException en creating()
-        // y no se inserta nada.
-        MaterialOrden::create([
+        // y no se inserta nada. La transacción une el descuento y su
+        // movimiento de kardex: o quedan los dos, o ninguno.
+        DB::transaction(fn () => MaterialOrden::create([
             'orden_id' => $this->orden->id,
             'material_id' => $this->material_id,
             'cantidad_usada' => $this->cantidad_usada,
-        ]);
+        ]));
 
         $this->reset('material_id');
         $this->cantidad_usada = 1;
@@ -95,9 +109,10 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function quitarMaterial(int $id): void
     {
-        abort_unless($this->puedeEditar, 403);
+        $this->authorize('update', $this->orden);
+        $this->exigirAbierta();
 
-        MaterialOrden::where('orden_id', $this->orden->id)->whereKey($id)->first()?->delete();
+        DB::transaction(fn () => MaterialOrden::where('orden_id', $this->orden->id)->whereKey($id)->first()?->delete());
 
         unset($this->materiales);
         $this->recargar();
@@ -107,10 +122,11 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function actualizar(): void
     {
-        abort_unless($this->puedeEditar, 403);
+        $this->authorize('update', $this->orden);
+        $this->exigirAbierta();
 
         $reglas = [
-            'estado' => [Rule::in(array_keys(OrdenTrabajo::ESTADOS))],
+            'estado' => ['required', Rule::in(array_keys(OrdenTrabajo::ESTADOS))],
             'observaciones' => ['nullable', 'string'],
         ];
 
@@ -272,7 +288,7 @@ new #[Layout('layouts.app')] class extends Component {
     </div>
 
     {{-- Estado --}}
-    @if ($this->puedeEditar)
+    @if ($this->puedeEditar && $orden->estaAbierta())
         <form wire:submit="actualizar" class="space-y-4 bg-white border rounded p-4">
             <div>
                 <label class="block font-medium mb-1 text-slate-800">Estado de la visita</label>

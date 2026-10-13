@@ -1,0 +1,91 @@
+# Producción: VM con Docker detrás del Caddy que comparten las demás apps.
+#
+#   docker compose up -d --build
+#
+# Ningún contenedor publica puertos. soporte-app entra a la red externa "proxy",
+# donde Caddy la alcanza por su nombre; MySQL vive solo en la red interna.
+# Variables: .env (ver .env.production.example). Para probar en el PC, ver
+# docker-compose.local.yml.
+
+name: soporte
+
+x-aplicacion: &aplicacion
+  image: soporte-gestion:latest
+  build: .
+  env_file: ${ARCHIVO_ENV:-.env}
+  restart: unless-stopped
+  volumes:
+    # Fotos y firmas de las visitas: las escriben la app y las borra el
+    # reinicio nocturno de la demo (soporte-tareas). Mismo volumen para todos.
+    - archivos:/var/www/html/storage/app
+  networks:
+    - interna
+
+services:
+  soporte-app:
+    <<: *aplicacion
+    container_name: soporte-app
+    command: web
+    networks:
+      - interna
+      - proxy
+    depends_on:
+      soporte-mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost/up"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+
+  # Los correos de las alertas de SLA salen de aquí.
+  soporte-cola:
+    <<: *aplicacion
+    container_name: soporte-cola
+    command: cola
+    depends_on:
+      soporte-app:
+        condition: service_healthy
+
+  # Alertas cada hora, reintentos cada 15 min, reinicio de la demo a las 03:00.
+  soporte-tareas:
+    <<: *aplicacion
+    container_name: soporte-tareas
+    command: tareas
+    depends_on:
+      soporte-app:
+        condition: service_healthy
+
+  soporte-mysql:
+    image: mysql:8.4
+    container_name: soporte-mysql
+    restart: unless-stopped
+    # Hora de Colombia también para las consultas a mano y los respaldos; Laravel
+    # ya la fija en su sesión con DB_TIMEZONE.
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--default-time-zone=-05:00"]
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - mysql:/var/lib/mysql
+    networks:
+      - interna
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+networks:
+  interna: {}
+  proxy:
+    external: true
+    name: ${RED_PROXY:-proxy}
+
+volumes:
+  archivos: {}
+  mysql: {}

@@ -1,0 +1,26 @@
+# Caddy del entorno local (docker-compose.local.yml). Sin HTTPS: escucha en el
+# 80 del contenedor, publicado en 127.0.0.1:8080 del PC. Las cabeceras son las
+# de producción salvo HSTS, que sobre http no aplica.
+{
+	auto_https off
+	admin off
+}
+
+(cabeceras-soporte) {
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(self), geolocation=(self), microphone=(), payment=(), usb=()"
+		# Livewire trae Alpine, que evalúa sus expresiones: necesita unsafe-eval.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.bunny.net; font-src 'self' https://fonts.bunny.net; img-src 'self' data: blob: https://laravel.com; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'"
+		-Server
+		-X-Powered-By
+	}
+}
+
+:80 {
+	encode zstd gzip
+	import cabeceras-soporte
+	reverse_proxy soporte-app:80
+}

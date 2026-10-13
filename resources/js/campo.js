@@ -14,6 +14,8 @@
  * distinguir el fallo que se arregla reintentando del que no.
  */
 
+import { decidir, esDe, motivoPorDefecto } from './campo/decision.js'
+
 /* ---------------------------------------------------------------
  | Cola en el teléfono
  * --------------------------------------------------------------- */
@@ -45,21 +47,67 @@ async function conLaTienda(modo, accion) {
     })
 }
 
+const RECHAZADO = 'rechazado'
+
 const cola = {
     guardar: (pendiente) => conLaTienda('readwrite', (t) => t.put(pendiente)),
     listar: () => conLaTienda('readonly', (t) => t.getAll()),
     borrar: (uuid) => conLaTienda('readwrite', (t) => t.delete(uuid)),
-    async contar() {
-        try {
-            return (await this.listar()).length
-        } catch {
-            return 0
-        }
+    obtener: (uuid) => conLaTienda('readonly', (t) => t.get(uuid)),
+
+    /** Lo de quien tiene la sesión abierta que todavía se intenta enviar. */
+    async porEnviar() {
+        return (await this.listar()).filter((p) => esMio(p) && p.estado !== RECHAZADO)
+    },
+
+    /** Lo que el servidor no aceptó: se guarda hasta que alguien decida. */
+    async rechazados() {
+        return (await this.listar()).filter((p) => esMio(p) && p.estado === RECHAZADO)
+    },
+
+    /** Cierres que dejó en este teléfono otra cuenta y que esperan a su dueño. */
+    async deOtrasCuentas() {
+        return (await this.listar()).filter((p) => !esMio(p))
     },
 }
 
-function anunciar(detalle) {
-    window.dispatchEvent(new CustomEvent('campo:cola', { detail: detalle }))
+/**
+ * Un teléfono puede pasar de un técnico a otro. Cada cierre guarda quién lo
+ * hizo y solo se envía con la sesión de esa persona: con la de otro técnico
+ * el servidor lo rechazaba (y antes se borraba), y con la de un coordinador
+ * quedaba registrado a su nombre.
+ */
+function usuarioActual() {
+    return document.querySelector('meta[name="usuario-id"]')?.content ?? null
+}
+
+function esMio(pendiente) {
+    return esDe(pendiente, usuarioActual())
+}
+
+/** Avisa a la barra de estado de cuántos quedan y de si algo se rechazó. */
+async function anunciar(detalle = {}) {
+    let pendientes = 0
+    let rechazados = []
+    let ajenos = 0
+
+    try {
+        pendientes = (await cola.porEnviar()).length
+        rechazados = (await cola.rechazados()).map(({ uuid, error, creado }) => ({ uuid, error, creado }))
+        ajenos = (await cola.deOtrasCuentas()).length
+    } catch {
+        /* sin IndexedDB no hay nada que contar */
+    }
+
+    window.dispatchEvent(new CustomEvent('campo:cola', { detail: { pendientes, rechazados, ajenos, ...detalle } }))
+}
+
+/**
+ * Deja el cierre guardado como rechazado, con el motivo, en vez de borrarlo:
+ * la firma y las fotos no se pueden volver a tomar.
+ */
+async function marcarRechazado(pendiente) {
+    await cola.guardar({ ...pendiente, estado: RECHAZADO })
 }
 
 /* ---------------------------------------------------------------
@@ -76,11 +124,10 @@ function cabeceras() {
 }
 
 /**
- * Un intento. Devuelve qué hacer con el pendiente, que es la decisión que
- * importa: reintentar a ciegas un cierre que el servidor rechazó por datos
- * inválidos deja la cola atascada para siempre.
+ * Un intento. Devuelve qué hacer con el pendiente (ver decision.js) y, si el
+ * servidor lo rechazó, el motivo que dio.
  *
- * @returns {'enviado'|'descartar'|'reintentar'|'sesion'}
+ * @returns {Promise<{decision: 'enviado'|'rechazado'|'reintentar'|'sesion', motivo: string|null}>}
  */
 async function intentar(pendiente) {
     let respuesta
@@ -93,40 +140,49 @@ async function intentar(pendiente) {
             body: JSON.stringify(pendiente.carga),
         })
     } catch {
-        return 'reintentar' // sin red, o se cayó a mitad
+        return { decision: decidir(null), motivo: null } // sin red, o se cayó a mitad
     }
 
-    if (respuesta.ok) {
-        return 'enviado'
+    const decision = decidir(respuesta.status)
+
+    if (decision !== 'rechazado') {
+        return { decision, motivo: null }
     }
 
-    // 419: la sesión caducó mientras el cierre esperaba en el teléfono. Los
-    // datos están bien; lo que falta es que la persona vuelva a entrar.
-    if (respuesta.status === 419 || respuesta.status === 401) {
-        return 'sesion'
+    let motivo = motivoPorDefecto(respuesta.status)
+
+    try {
+        const cuerpo = await respuesta.json()
+        motivo = cuerpo.message || motivo
+    } catch {
+        /* sin cuerpo útil: un 413 del proxy, por ejemplo, viene en HTML */
     }
 
-    // 422 y 403 no mejoran reintentando: o los datos no pasan la validación o
-    // esta visita no es de quien la envía.
-    if (respuesta.status === 422 || respuesta.status === 403 || respuesta.status === 404) {
-        let detalle = 'El servidor rechazó un cierre guardado.'
-
-        try {
-            const cuerpo = await respuesta.json()
-            detalle = cuerpo.message || detalle
-        } catch {
-            /* sin cuerpo útil */
-        }
-
-        pendiente.error = detalle
-
-        return 'descartar'
-    }
-
-    return 'reintentar' // 5xx y demás: puede ser pasajero
+    return { decision, motivo }
 }
 
 let drenando = false
+
+/**
+ * Un solo envío a la vez en todo el navegador.
+ *
+ * `drenando` solo cuida esta pestaña: con dos pestañas abiertas, o con el
+ * reintento de cada minuto coincidiendo con el envío del botón, el mismo
+ * cierre salía dos veces. El servidor lo reconoce (devuelve "repetido"),
+ * pero el segundo envío sube otra vez las fotos por datos móviles. El
+ * candado de Web Locks se comparte entre pestañas del mismo origen.
+ *
+ * Con `esperar: false`, si otra pestaña ya está enviando, esta no hace nada.
+ */
+function conCandado({ esperar }, accion) {
+    if (!navigator.locks?.request) {
+        return accion()
+    }
+
+    return navigator.locks.request('sgt-campo-cola', { ifAvailable: !esperar }, (candado) =>
+        candado ? accion() : undefined,
+    )
+}
 
 /** Vacía la cola. Se detiene al primer pendiente que haya que reintentar. */
 async function drenar() {
@@ -137,31 +193,37 @@ async function drenar() {
     drenando = true
 
     try {
-        for (const pendiente of await cola.listar()) {
-            const decision = await intentar(pendiente)
-
-            if (decision === 'enviado') {
-                await cola.borrar(pendiente.uuid)
-                continue
-            }
-
-            if (decision === 'descartar') {
-                await cola.borrar(pendiente.uuid)
-                anunciar({ error: pendiente.error })
-                continue
-            }
-
-            if (decision === 'sesion') {
-                anunciar({ error: 'La sesión se cerró. Entra otra vez para enviar lo que quedó guardado.' })
-            }
-
-            break // el resto espera: no tiene sentido insistir con la red caída
-        }
-
-        anunciar({ pendientes: await cola.contar() })
+        await conCandado({ esperar: false }, vaciar)
     } finally {
         drenando = false
     }
+}
+
+async function vaciar() {
+    let sesionCaducada = false
+
+    for (const pendiente of await cola.porEnviar()) {
+        const { decision, motivo } = await intentar(pendiente)
+
+        if (decision === 'enviado') {
+            await cola.borrar(pendiente.uuid)
+            continue
+        }
+
+        // Un rechazo no frena a los demás: se aparta y se sigue.
+        if (decision === 'rechazado') {
+            await marcarRechazado({ ...pendiente, error: motivo })
+            await anunciar({ error: motivo })
+            continue
+        }
+
+        sesionCaducada = decision === 'sesion'
+
+        break // el resto espera: no tiene sentido insistir con la red caída
+    }
+
+    // Tras volver a entrar, una vuelta limpia quita el aviso de sesión.
+    await anunciar({ sesionCaducada })
 }
 
 /**
@@ -172,20 +234,55 @@ async function drenar() {
  * el cierre ya está a salvo en el teléfono.
  */
 async function encolar(url, carga) {
-    const pendiente = { uuid: carga.uuid, url, carga, creado: new Date().toISOString() }
+    const pendiente = { uuid: carga.uuid, url, carga, usuarioId: usuarioActual(), creado: new Date().toISOString() }
 
     await cola.guardar(pendiente)
-    anunciar({ pendientes: await cola.contar() })
+    await anunciar()
 
-    const decision = await intentar(pendiente)
+    // Se espera el candado: si otra pestaña estaba vaciando la cola, puede
+    // que ya lo haya enviado. En ese caso no hay nada más que hacer.
+    const { decision, motivo } = await conCandado({ esperar: true }, async () => {
+        if (!(await cola.obtener(pendiente.uuid))) {
+            return { decision: 'enviado', motivo: null }
+        }
 
-    if (decision === 'enviado' || decision === 'descartar') {
-        await cola.borrar(pendiente.uuid)
+        const resultado = await intentar(pendiente)
+
+        if (resultado.decision === 'enviado') {
+            await cola.borrar(pendiente.uuid)
+        }
+
+        if (resultado.decision === 'rechazado') {
+            await marcarRechazado({ ...pendiente, error: resultado.motivo })
+        }
+
+        return resultado
+    })
+
+    await anunciar({ error: motivo, sesionCaducada: decision === 'sesion' })
+
+    return { decision, motivo }
+}
+
+/** Baja el cierre rechazado como archivo, con fotos y firma, antes de descartarlo. */
+async function descargarCierre(uuid) {
+    const pendiente = await cola.obtener(uuid)
+
+    if (!pendiente) {
+        return
     }
 
-    anunciar({ pendientes: await cola.contar(), error: decision === 'descartar' ? pendiente.error : null })
+    const archivo = new Blob([JSON.stringify(pendiente, null, 2)], { type: 'application/json' })
+    const enlace = document.createElement('a')
+    enlace.href = URL.createObjectURL(archivo)
+    enlace.download = `cierre-${uuid}.json`
+    enlace.click()
+    URL.revokeObjectURL(enlace.href)
+}
 
-    return decision
+async function descartarCierre(uuid) {
+    await cola.borrar(uuid)
+    await anunciar()
 }
 
 window.addEventListener('online', drenar)
@@ -244,6 +341,10 @@ function registrar(Alpine) {
     Alpine.data('estadoDeConexion', () => ({
         sinSenal: !navigator.onLine,
         pendientes: 0,
+        rechazados: [],
+        ajenos: 0,
+        sesionCaducada: false,
+        verRechazados: false,
         ultimoError: '',
 
         init() {
@@ -254,13 +355,32 @@ function registrar(Alpine) {
                 if (typeof detail.pendientes === 'number') {
                     this.pendientes = detail.pendientes
                 }
+                if (Array.isArray(detail.rechazados)) {
+                    this.rechazados = detail.rechazados
+                }
+                if (typeof detail.ajenos === 'number') {
+                    this.ajenos = detail.ajenos
+                }
+                if (typeof detail.sesionCaducada === 'boolean') {
+                    this.sesionCaducada = detail.sesionCaducada
+                }
                 if (detail.error) {
                     this.ultimoError = detail.error
                     setTimeout(() => (this.ultimoError = ''), 12_000)
                 }
             })
 
-            cola.contar().then((n) => (this.pendientes = n))
+            anunciar()
+        },
+
+        descargar(uuid) {
+            descargarCierre(uuid)
+        },
+
+        async descartar(uuid) {
+            if (confirm('Se borra del teléfono con su firma y sus fotos. ¿Ya lo descargaste o lo volviste a cerrar?')) {
+                await descartarCierre(uuid)
+            }
         },
     }))
 
@@ -281,6 +401,7 @@ function registrar(Alpine) {
         error: '',
         listo: false,
         guardadoSinSenal: false,
+        sesionCaducada: false,
         lienzoFirma: null,
 
         init() {
@@ -442,20 +563,26 @@ function registrar(Alpine) {
                 materiales: this.materiales.map(({ material_id, cantidad }) => ({ material_id, cantidad })),
             }
 
-            const decision = await encolar(this.urlCierre, carga)
+            const { decision, motivo } = await encolar(this.urlCierre, carga)
 
-            if (decision === 'descartar') {
+            if (decision === 'rechazado') {
                 this.enviando = false
-                this.error = 'El servidor rechazó el cierre. Revisa los datos.'
+                this.error = `${motivo} Quedó guardado en el teléfono: corrige y vuelve a cerrar, o descárgalo desde la barra de arriba.`
 
                 return
             }
 
             // Enviado o guardado: en los dos casos el técnico ya terminó aquí.
             this.listo = true
-            this.guardadoSinSenal = decision !== 'enviado'
+            this.guardadoSinSenal = decision === 'reintentar'
 
-            setTimeout(() => (window.location.href = this.urlRuta), 1600)
+            // Con la sesión caducada no hay "señal" que esperar: hay que
+            // volver a entrar. No se lo manda a la ruta, que pediría login.
+            this.sesionCaducada = decision === 'sesion'
+
+            if (!this.sesionCaducada) {
+                setTimeout(() => (window.location.href = this.urlRuta), 1600)
+            }
         },
     }))
 }

@@ -87,3 +87,18 @@ test('correct password must be provided to delete account', function () {
 
     $this->assertNotNull($user->fresh());
 });
+
+test('una cuenta con casos a su nombre no se borra y se explica por qué', function () {
+    $usuario = usuarioCon(\App\Models\User::ROL_CALL_CENTER);
+    soporteDePrueba(['usuario_registra_id' => $usuario->id]);
+
+    $this->actingAs($usuario);
+
+    Volt::test('profile.delete-user-form')
+        ->set('password', 'secreto123')
+        ->call('deleteUser')
+        ->assertHasErrors('password');
+
+    expect(\App\Models\User::find($usuario->id))->not->toBeNull();
+    $this->assertAuthenticated();
+});

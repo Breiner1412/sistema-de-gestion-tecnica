@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
 use App\Models\Cliente;
@@ -35,13 +37,31 @@ class ImportarHistorico extends Command
     protected $signature = 'soportes:importar-historico
                             {--casos=database/data/historico_casos.csv : CSV de casos}
                             {--clientes=database/data/historico_clientes.csv : CSV de clientes}
-                            {--fresh : Borra los casos existentes antes de importar}
+                            {--fresh : Borra los casos importados antes (los creados en la aplicación se conservan)}
                             {--actualizar : Refresca nombre y telefono de los clientes que ya existen}
                             {--limit=0 : Importa solo los primeros N casos}';
 
     protected $description = 'Importa el histórico seudonimizado de la operación desde CSV';
 
     private const LOTE = 500;
+
+    private const NOTA_IMPORTACION = 'Caso importado del histórico de la operación.';
+
+    /** El histórico real pesa menos de 1 MB: 20 es de sobra y frena lo absurdo. */
+    private const MAX_BYTES = 20 * 1024 * 1024;
+
+    /** Una fila del histórico ocupa unos 150 caracteres. */
+    private const MAX_LINEA = 8192;
+
+    private const COLUMNAS_CLIENTES = ['codigo_abonado', 'cedula', 'nombre', 'telefono'];
+
+    private const COLUMNAS_CASOS = [
+        'codigo_abonado', 'tipo_solicitud', 'canal_ingreso', 'servicio_afectado', 'falla', 'diagnostico',
+        'estado', 'fecha_ingreso', 'fecha_cierre', 'asesor_idx', 'tecnico_idx', 'escalado',
+    ];
+
+    /** Filas que no tenían el número de columnas del encabezado. */
+    private int $malformadas = 0;
 
     public function handle(): int
     {
@@ -56,16 +76,28 @@ class ImportarHistorico extends Command
             }
         }
 
-        if ($this->option('fresh')) {
-            if (!$this->confirm('Esto borra TODOS los casos y sus visitas. ¿Continuar?', false)) {
-                return self::FAILURE;
-            }
-
-            $this->limpiar();
+        if ($this->option('fresh')
+            && ! $this->confirm('Esto borra los casos importados del histórico y sus visitas. ¿Continuar?', false)) {
+            return self::FAILURE;
         }
 
-        $clientes = $this->importarClientes($rutaClientes);
-        $this->importarCasos($rutaCasos, $clientes);
+        // Todo o nada: si algo falla a mitad, la base queda como estaba, y no
+        // con los casos borrados y el histórico a medias.
+        try {
+            DB::transaction(function () use ($rutaCasos, $rutaClientes) {
+                if ($this->option('fresh')) {
+                    $this->limpiar();
+                }
+
+                $clientes = $this->importarClientes($rutaClientes);
+                $this->importarCasos($rutaCasos, $clientes);
+            });
+        } catch (\RuntimeException $e) {
+            $this->error($e->getMessage());
+            $this->line('  No se importó nada: la base quedó como estaba.');
+
+            return self::FAILURE;
+        }
 
         return self::SUCCESS;
     }
@@ -80,10 +112,24 @@ class ImportarHistorico extends Command
         return $absoluta ? $ruta : base_path($ruta);
     }
 
+    /**
+     * Borra solo lo que vino del histórico; los casos creados en la aplicación
+     * se quedan. Las visitas y el historial caen por cascada.
+     */
     private function limpiar(): void
     {
-        DB::table('soportes')->delete(); // las visitas e historial caen por cascada
-        $this->warn('Casos existentes eliminados.');
+        $borrados = DB::table('soportes')
+            ->where(fn ($q) => $q
+                ->whereNotNull('origen_importacion')
+                // Importados antes de que existiera la marca: se reconocen por
+                // la nota automática que el importador deja en su historial.
+                ->orWhereExists(fn ($h) => $h->from('soporte_historial_estados')
+                    ->whereColumn('soporte_historial_estados.soporte_id', 'soportes.id')
+                    ->whereNull('soporte_historial_estados.usuario_id')
+                    ->where('soporte_historial_estados.motivo', self::NOTA_IMPORTACION)))
+            ->delete();
+
+        $this->warn("{$borrados} casos importados eliminados.");
     }
 
     /* ---------------------------------------------------------------
@@ -99,8 +145,14 @@ class ImportarHistorico extends Command
         $lote = [];
         $nuevos = 0;
         $refrescar = [];
+        $omitidos = 0;
 
-        foreach ($this->filas($ruta) as $fila) {
+        foreach ($this->filas($ruta, self::COLUMNAS_CLIENTES) as $fila) {
+            if (! $this->clienteValido($fila)) {
+                $omitidos++;
+                continue;
+            }
+
             if (isset($existentes[$fila['codigo_abonado']])) {
                 // Por defecto no se toca lo que ya esta: el importador se corre
                 // muchas veces y no debe pisar lo que alguien edito a mano. Con
@@ -138,7 +190,8 @@ class ImportarHistorico extends Command
             $nuevos += count($lote);
         }
 
-        $this->line("  {$nuevos} clientes nuevos.");
+        $this->line("  {$nuevos} clientes nuevos.".($omitidos ? " {$omitidos} omitidos por datos incompletos." : ''));
+        $this->avisarMalformadas();
 
         if ($refrescar !== []) {
             $this->refrescar($refrescar);
@@ -184,36 +237,55 @@ class ImportarHistorico extends Command
         $asesores = User::where('rol', User::ROL_CALL_CENTER)->orderBy('id')->pluck('id')->all();
 
         if (!$tecnicos || !$asesores) {
-            $this->error('Faltan usuarios. Corre primero: php artisan db:seed --class=UsuarioSeeder');
-
-            return;
+            throw new \RuntimeException('Faltan usuarios. Corre primero: php artisan db:seed --class=UsuarioSeeder');
         }
 
         $calendario = CalendarioHabil::desdeConfig();
         $consecutivos = $this->consecutivosPorAnio();
         $limite = (int) $this->option('limit');
 
+        // Lo que ya entró en una corrida anterior se salta: reimportar no
+        // duplica nada.
+        $yaImportados = DB::table('soportes')->whereNotNull('origen_importacion')
+            ->pluck('origen_importacion')->flip()->all();
+        $vecesVista = [];
+
         $lote = [];
         $importados = 0;
+        $repetidos = 0;
         $omitidos = 0;
         $barra = $this->output->createProgressBar();
         $barra->start();
 
-        foreach ($this->filas($ruta) as $fila) {
+        foreach ($this->filas($ruta, self::COLUMNAS_CASOS) as $fila) {
             if ($limite > 0 && $importados >= $limite) {
                 break;
             }
 
-            $clienteId = $clientes[$fila['codigo_abonado']] ?? null;
-            $ingreso = $fila['fecha_ingreso'] ? CarbonImmutable::parse($fila['fecha_ingreso']) : null;
+            // La marca sale del contenido de la fila y de cuántas veces se ha
+            // visto una fila idéntica: dos casos iguales del mismo abonado a la
+            // misma hora siguen siendo dos, y el número de línea no importa.
+            $contenido = implode('|', $fila);
+            $vecesVista[$contenido] = ($vecesVista[$contenido] ?? 0) + 1;
+            $origen = sha1($contenido.'#'.$vecesVista[$contenido]);
 
-            // Un puñado de filas del Excel traía fechas imposibles o en el futuro.
-            if (!$clienteId || !$ingreso || $ingreso->isFuture()) {
+            if (isset($yaImportados[$origen])) {
+                $repetidos++;
+                continue;
+            }
+
+            $clienteId = $clientes[$fila['codigo_abonado']] ?? null;
+            $ingreso = $this->fecha($fila['fecha_ingreso']);
+
+            // Un puñado de filas del Excel traía fechas imposibles o en el
+            // futuro, y un valor que el sistema no conoce rompería la máquina
+            // de estados más tarde: se omiten, no tumban la importación.
+            if (!$clienteId || !$ingreso || $ingreso->isFuture() || ! $this->casoValido($fila)) {
                 $omitidos++;
                 continue;
             }
 
-            $cierre = $fila['fecha_cierre'] ? CarbonImmutable::parse($fila['fecha_cierre']) : null;
+            $cierre = $this->fecha($fila['fecha_cierre']);
             $estado = $fila['estado'] ?: Soporte::ESTADO_SOLUCIONADO;
             $cerrado = in_array($estado, Soporte::ESTADOS_FINALES, true);
 
@@ -224,8 +296,16 @@ class ImportarHistorico extends Command
             $inmediato = $fila['tipo_solicitud'] === Soporte::TIPO_SIN_INTERNET
                 || ($fila['falla'] && in_array($fila['falla'], $criticas, true));
 
+            $vence = $cerrado ? null : $this->vencimiento($calendario, $ingreso, $inmediato);
+
+            // Lo abierto del histórico venció hace meses: se da por avisado
+            // para que la primera corrida de soportes:alertar-sla no mande un
+            // correo con cientos de casos viejos a gestión.
+            $yaVencido = $vence?->isPast() ?? false;
+
             $lote[] = [
                 'numero_soporte' => sprintf('SGT-%d-%06d', $anio, $consecutivos[$anio]),
+                'origen_importacion' => $origen,
                 'cliente_id' => $clienteId,
                 'tipo_solicitud' => $fila['tipo_solicitud'],
                 'canal_ingreso' => $fila['canal_ingreso'] ?: Soporte::CANAL_CALL_CENTER,
@@ -239,7 +319,7 @@ class ImportarHistorico extends Command
                     ? $tecnicos[((int) $fila['tecnico_idx']) % count($tecnicos)]
                     : null,
                 'descripcion' => $this->descripcion($fila),
-                'observaciones_cierre' => $cerrado ? 'Caso importado del histórico de la operación.' : null,
+                'observaciones_cierre' => $cerrado ? self::NOTA_IMPORTACION : null,
                 'estado' => $estado,
                 'escalado_nivel_3' => $fila['escalado'] === '1',
                 'fecha_escalamiento' => $fila['escalado'] === '1' ? $ingreso : null,
@@ -248,7 +328,10 @@ class ImportarHistorico extends Command
                 'tiempo_respuesta' => null,
                 'tiempo_resolucion' => $cerrado && $cierre ? $calendario->minutosEntre($ingreso, $cierre) : null,
                 'fecha_cierre' => $cerrado ? ($cierre ?? $ingreso) : null,
-                'sla_vence_at' => $cerrado ? null : $this->vencimiento($calendario, $ingreso, $inmediato),
+                'sla_vence_at' => $vence?->format('Y-m-d H:i:s'),
+                'sla_presupuesto_minutos' => $vence ? $calendario->minutosEntre($ingreso, $vence) : null,
+                'alerta_sla_nivel' => $yaVencido ? 'vencido' : null,
+                'alerta_sla_at' => $yaVencido ? now() : null,
                 'intentos_contacto' => $estado === Soporte::ESTADO_CERRADO_SIN_CONTACTO ? 3 : 0,
                 'created_at' => $ingreso,
                 'updated_at' => $cierre ?? $ingreso,
@@ -271,7 +354,16 @@ class ImportarHistorico extends Command
         $barra->finish();
         $this->newLine(2);
 
-        $this->info("Importados {$importados} casos.".($omitidos ? " Omitidos {$omitidos} por datos incompletos." : ''));
+        // Los números se pusieron aquí, sin pasar por el contador: se le
+        // avisa, o la próxima alta desde la pantalla chocaría con ellos.
+        foreach (array_keys($consecutivos) as $anio) {
+            Soporte::sincronizarSecuencia($anio);
+        }
+
+        $this->info("Importados {$importados} casos."
+            .($repetidos ? " {$repetidos} ya estaban importados." : '')
+            .($omitidos ? " Omitidos {$omitidos} por datos incompletos o inválidos." : ''));
+        $this->avisarMalformadas();
         $this->line('  El canal de ingreso es simulado y el tiempo de respuesta queda vacío:');
         $this->line('  ninguno de los dos existía en el Excel original.');
     }
@@ -293,7 +385,7 @@ class ImportarHistorico extends Command
                     'estado_anterior' => null,
                     'estado_nuevo' => $caso['estado'],
                     'usuario_id' => null,
-                    'motivo' => 'Caso importado del histórico de la operación.',
+                    'motivo' => self::NOTA_IMPORTACION,
                     'automatico' => true,
                     'created_at' => $caso['created_at'],
                     'updated_at' => $caso['created_at'],
@@ -319,15 +411,13 @@ class ImportarHistorico extends Command
         return $consecutivos;
     }
 
-    private function vencimiento(CalendarioHabil $calendario, CarbonImmutable $ingreso, bool $inmediato): string
+    private function vencimiento(CalendarioHabil $calendario, CarbonImmutable $ingreso, bool $inmediato): CarbonImmutable
     {
         $config = config($inmediato ? 'sla.tiempos.inmediata' : 'sla.tiempos.normal');
 
-        $vence = ($config['unidad'] ?? 'horas') === 'dias'
+        return ($config['unidad'] ?? 'horas') === 'dias'
             ? $calendario->sumarDias($ingreso, (int) $config['resolucion'])
             : $calendario->sumarHoras($ingreso, (float) $config['resolucion']);
-
-        return $vence->format('Y-m-d H:i:s');
     }
 
     /** El texto libre del Excel se descartó: se reconstruye una descripción neutra. */
@@ -348,19 +438,116 @@ class ImportarHistorico extends Command
      * --------------------------------------------------------------- */
 
     /** Lee el CSV fila por fila, sin cargarlo entero en memoria. */
-    private function filas(string $ruta): \Generator
+    /**
+     * Lee el CSV fila por fila, sin cargarlo entero en memoria.
+     *
+     * Lo que llega de un Excel no es limpio: BOM al inicio, Latin-1 en vez de
+     * UTF-8, filas vacías al final, alguna fila partida. Aquí se normaliza, y
+     * lo que no tiene arreglo se cuenta en vez de desaparecer en silencio.
+     *
+     * @param  array<int, string>  $requeridas
+     */
+    private function filas(string $ruta, array $requeridas): \Generator
     {
-        $fh = fopen($ruta, 'r');
-        $encabezado = fgetcsv($fh);
-
-        while (($datos = fgetcsv($fh)) !== false) {
-            if ($datos === [null] || count($datos) !== count($encabezado)) {
-                continue;
-            }
-
-            yield array_combine($encabezado, $datos);
+        if (filesize($ruta) > self::MAX_BYTES) {
+            throw new \RuntimeException(sprintf('%s pesa más de %d MB.', basename($ruta), self::MAX_BYTES / 1048576));
         }
 
-        fclose($fh);
+        $fh = fopen($ruta, 'r');
+
+        if ($fh === false) {
+            throw new \RuntimeException("No se pudo abrir {$ruta}");
+        }
+
+        try {
+            $encabezado = fgetcsv($fh, self::MAX_LINEA, ',', '"', '');
+
+            if (! $encabezado || $encabezado === [null]) {
+                throw new \RuntimeException(basename($ruta).' está vacío.');
+            }
+
+            $encabezado = array_map(fn ($columna) => trim($this->utf8((string) $columna)), $encabezado);
+            $encabezado[0] = preg_replace('/^\x{FEFF}/u', '', $encabezado[0]);
+
+            $faltan = array_diff($requeridas, $encabezado);
+
+            if ($faltan !== []) {
+                throw new \RuntimeException('Faltan columnas en '.basename($ruta).': '.implode(', ', $faltan));
+            }
+
+            while (($datos = fgetcsv($fh, self::MAX_LINEA, ',', '"', '')) !== false) {
+                if ($datos === [null]) {
+                    continue; // línea vacía
+                }
+
+                if (count($datos) !== count($encabezado)) {
+                    $this->malformadas++;
+                    continue;
+                }
+
+                yield array_combine($encabezado, array_map(fn ($valor) => trim($this->utf8((string) $valor)), $datos));
+            }
+        } finally {
+            fclose($fh);
+        }
+    }
+
+    /** Un CSV guardado desde Excel en Windows suele venir en Windows-1252. */
+    private function utf8(string $valor): string
+    {
+        return mb_check_encoding($valor, 'UTF-8') ? $valor : mb_convert_encoding($valor, 'UTF-8', 'Windows-1252');
+    }
+
+    /** Solo el formato del histórico; nada de "next monday" ni fechas que PHP corrige solas. */
+    private function fecha(string $valor): ?CarbonImmutable
+    {
+        if ($valor === '') {
+            return null;
+        }
+
+        foreach (['Y-m-d H:i:s', 'Y-m-d H:i'] as $formato) {
+            try {
+                $fecha = CarbonImmutable::createFromFormat($formato, $valor);
+            } catch (\InvalidArgumentException) {
+                continue; // Carbon 3 lanza en vez de devolver false
+            }
+
+            // Si al volver a escribirla no da lo mismo, PHP la "corrigió"
+            // (31 de febrero, hora 25): era una fecha imposible.
+            if ($fecha && $fecha->format($formato) === $valor) {
+                return $fecha;
+            }
+        }
+
+        return null;
+    }
+
+    /** Tipo, estado, canal e índices tienen que ser valores que el sistema conoce. */
+    private function casoValido(array $fila): bool
+    {
+        $indice = fn (string $valor) => $valor === '' || ctype_digit($valor);
+
+        return array_key_exists($fila['tipo_solicitud'], Soporte::TIPOS_SOLICITUD)
+            && ($fila['estado'] === '' || array_key_exists($fila['estado'], Soporte::ESTADOS))
+            && ($fila['canal_ingreso'] === '' || array_key_exists($fila['canal_ingreso'], Soporte::CANALES))
+            && in_array($fila['escalado'], ['', '0', '1'], true)
+            && $indice($fila['asesor_idx'])
+            && $indice($fila['tecnico_idx']);
+    }
+
+    private function clienteValido(array $fila): bool
+    {
+        return $fila['codigo_abonado'] !== '' && mb_strlen($fila['codigo_abonado']) <= 30
+            && $fila['cedula'] !== '' && mb_strlen($fila['cedula']) <= 30
+            && $fila['nombre'] !== '' && mb_strlen($fila['nombre']) <= 255
+            && mb_strlen($fila['telefono']) <= 30;
+    }
+
+    private function avisarMalformadas(): void
+    {
+        if ($this->malformadas > 0) {
+            $this->warn("  {$this->malformadas} fila(s) con columnas de más o de menos: no se importaron.");
+            $this->malformadas = 0;
+        }
     }
 }

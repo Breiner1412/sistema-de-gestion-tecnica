@@ -10,11 +10,14 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Locked;
 use Livewire\Volt\Component;
 
 new #[Layout('layouts.app')] class extends Component {
     // Cliente
     public string $busquedaCliente = '';
+    // Lo pone seleccionarCliente(); el navegador no lo cambia directamente.
+    #[Locked]
     public ?int $cliente_id = null;
     public $contrato_id = '';
 
@@ -42,6 +45,8 @@ new #[Layout('layouts.app')] class extends Component {
     /** Permite llegar desde la ficha del cliente con el abonado ya elegido. */
     public function mount(): void
     {
+        $this->authorize('create', Soporte::class);
+
         if ($id = request()->integer('cliente')) {
             if (Cliente::whereKey($id)->exists()) {
                 $this->cliente_id = $id;
@@ -112,7 +117,8 @@ new #[Layout('layouts.app')] class extends Component {
     {
         $base = [
             'cliente_id' => ['required', 'exists:clientes,id'],
-            'contrato_id' => ['nullable', 'exists:contratos,id'],
+            // El contrato tiene que ser del cliente elegido, no de cualquiera.
+            'contrato_id' => ['nullable', Rule::exists('contratos', 'id')->where('cliente_id', $this->cliente_id)],
             'tipo_solicitud' => [Rule::in(array_keys(Soporte::TIPOS_SOLICITUD))],
             'canal_ingreso' => [Rule::in(array_keys(Soporte::CANALES))],
             'descripcion' => ['required', 'min:10'],
@@ -138,6 +144,8 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function guardar()
     {
+        $this->authorize('create', Soporte::class);
+
         $this->validate($this->reglas(), [], [
             'cliente_id' => 'cliente',
             'plan_nuevo_id' => 'plan nuevo',

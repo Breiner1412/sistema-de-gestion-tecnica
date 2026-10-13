@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Support;
 
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -60,7 +62,22 @@ class ExportadorCsv
             $valor === null => '',
             is_bool($valor) => $valor ? 'sí' : 'no',
             $valor instanceof \DateTimeInterface => $valor->format('Y-m-d H:i'),
-            default => (string) $valor,
+            is_int($valor), is_float($valor) => (string) $valor,
+            default => self::neutralizarFormula((string) $valor),
         };
+    }
+
+    /**
+     * Excel ejecuta como fórmula una celda que empieza por = + - @ (o por un
+     * tabulador o un retorno). Los nombres de clientes y usuarios los escribe
+     * gente de fuera: "=HYPERLINK(...)" en un nombre se volvía un enlace activo
+     * en el computador de quien abría el informe. Con un apóstrofo delante,
+     * Excel lo muestra como texto. Los números no se tocan.
+     */
+    private static function neutralizarFormula(string $texto): string
+    {
+        return $texto !== '' && in_array($texto[0], ['=', '+', '-', '@', "\t", "\r"], true)
+            ? "'".$texto
+            : $texto;
     }
 }

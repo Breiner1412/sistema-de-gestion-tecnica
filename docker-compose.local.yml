@@ -1,0 +1,36 @@
+# Para probar en el PC la misma pila de producción, con un Caddy propio en
+# http://localhost:8080 (sin HTTPS). Se usa encima de docker-compose.yml:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml --env-file .env.local up -d --build
+#
+# La red "proxy" aquí no es externa: la crea este archivo, con la misma IP fija
+# para Caddy (172.30.0.2) que la de producción, que es la de TRUSTED_PROXIES.
+# Si el 8080 está ocupado, PUERTO_LOCAL en .env.local cambia el puerto.
+
+services:
+  soporte-caddy:
+    image: caddy:2-alpine
+    container_name: soporte-caddy-local
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${PUERTO_LOCAL:-8080}:80"
+    volumes:
+      - ./docker/Caddyfile.local:/etc/caddy/Caddyfile:ro
+    networks:
+      proxy:
+        ipv4_address: 172.30.0.2
+    depends_on:
+      soporte-app:
+        condition: service_healthy
+
+networks:
+  proxy:
+    external: false
+    name: soporte-proxy-local
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+          gateway: 172.30.0.1
+          # Las IPs automáticas salen de la mitad alta: así la 172.30.0.2 queda
+          # libre para Caddy aunque soporte-app arranque primero.
+          ip_range: 172.30.0.128/25

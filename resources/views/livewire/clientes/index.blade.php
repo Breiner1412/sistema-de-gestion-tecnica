@@ -1,7 +1,6 @@
 <?php
 
 use App\Models\Cliente;
-use App\Models\User;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
@@ -24,10 +23,15 @@ new #[Layout('layouts.app')] class extends Component {
         }
     }
 
+    public function mount(): void
+    {
+        $this->authorize('viewAny', Cliente::class);
+    }
+
     #[Computed]
     public function puedeEditar(): bool
     {
-        return auth()->user()->tieneRol(User::ROL_ADMIN, User::ROL_GERENTE, User::ROL_CALL_CENTER);
+        return auth()->user()->can('create', Cliente::class);
     }
 
     public function with(): array

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
 use App\Exceptions\TransicionInvalidaException;
@@ -7,6 +9,7 @@ use App\Models\Evidencia;
 use App\Models\MaterialOrden;
 use App\Models\OrdenTrabajo;
 use App\Models\Soporte;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -29,6 +32,12 @@ use Illuminate\Validation\ValidationException;
  */
 class CierreDeVisita
 {
+    /** Lo único que se acepta como foto o firma. */
+    private const TIPOS_IMAGEN = ['image/jpeg', 'image/png', 'image/webp'];
+
+    /** 25 megapíxeles: de sobra para una foto de celular reducida. */
+    private const MAX_PIXELES = 25_000_000;
+
     /** @var array<int, string> */
     private array $avisos = [];
 
@@ -60,16 +69,13 @@ class CierreDeVisita
     {
         $uuid = $datos['uuid'] ?? null;
 
-        // El mismo envío otra vez: se responde que sí y no se toca nada.
+        // Un vistazo rápido antes de escribir fotos en disco. No decide nada:
+        // la comprobación que manda es la de dentro de la transacción.
         if ($uuid && $this->orden->cierre_uuid === $uuid) {
             return $this->respuesta(repetido: true);
         }
 
-        if (! $this->orden->estaAbierta()) {
-            throw ValidationException::withMessages([
-                'estado' => 'Esta visita ya fue cerrada por otra persona.',
-            ]);
-        }
+        $this->exigirAbierta();
 
         $archivos = [];
 
@@ -83,20 +89,59 @@ class CierreDeVisita
             $fotos = $this->guardarFotos($datos['fotos'] ?? []);
             $archivos = array_merge($archivos, array_column($fotos, 'ruta'));
 
-            DB::transaction(function () use ($datos, $uuid, $firma, $fotos) {
+            $repetido = DB::transaction(function () use ($datos, $uuid, $firma, $fotos) {
+                // Dos envíos simultáneos (el reintento del teléfono con mala
+                // señal) leen la orden antes de que el otro la cierre. Con el
+                // bloqueo, el segundo espera, la vuelve a leer ya cerrada y no
+                // cierra ni descuenta material dos veces.
+                $this->orden->setRawAttributes(
+                    OrdenTrabajo::lockForUpdate()->findOrFail($this->orden->id)->getAttributes(),
+                    true,
+                );
+
+                if ($uuid && $this->orden->cierre_uuid === $uuid) {
+                    return true;
+                }
+
+                $this->exigirAbierta();
+
                 $this->actualizarOrden($datos, $uuid, $firma);
                 $this->registrarEvidencias($fotos, $datos);
                 $this->registrarMateriales($datos['materiales'] ?? []);
                 $this->moverElCaso($datos);
+
+                return false;
             });
+        } catch (UniqueConstraintViolationException) {
+            Storage::disk(Evidencia::DISCO)->delete($archivos);
+
+            // El uuid lo pone el teléfono: si ya lo usó otra visita, el error
+            // es del envío, no del servidor.
+            throw ValidationException::withMessages([
+                'uuid' => 'Este cierre ya se registró en otra visita.',
+            ]);
         } catch (\Throwable $e) {
             // Sin esto, cada reintento fallido deja fotos huérfanas en disco.
-            Storage::disk('public')->delete($archivos);
+            Storage::disk(Evidencia::DISCO)->delete($archivos);
 
             throw $e;
         }
 
-        return $this->respuesta(repetido: false);
+        if ($repetido) {
+            // Las fotos de este envío sobran: ya las guardó el que llegó primero.
+            Storage::disk(Evidencia::DISCO)->delete($archivos);
+        }
+
+        return $this->respuesta(repetido: $repetido);
+    }
+
+    private function exigirAbierta(): void
+    {
+        if (! $this->orden->estaAbierta()) {
+            throw ValidationException::withMessages([
+                'estado' => 'Esta visita ya fue cerrada por otra persona.',
+            ]);
+        }
     }
 
     /* ---------------------------------------------------------------
@@ -225,7 +270,7 @@ class CierreDeVisita
         }
 
         $ruta = 'firmas/'.Str::uuid().'.png';
-        Storage::disk('public')->put($ruta, $binario);
+        Storage::disk(Evidencia::DISCO)->put($ruta, $this->imagenLimpia($binario, 'png', 'firma'));
 
         return $ruta;
     }
@@ -246,7 +291,7 @@ class CierreDeVisita
             }
 
             $ruta = 'evidencias/'.$this->orden->id.'/'.Str::uuid().'.jpg';
-            Storage::disk('public')->put($ruta, $binario);
+            Storage::disk(Evidencia::DISCO)->put($ruta, $this->imagenLimpia($binario, 'jpg', 'fotos'));
 
             $guardadas[] = [
                 'ruta' => $ruta,
@@ -270,6 +315,52 @@ class CierreDeVisita
         $binario = base64_decode($base64, true);
 
         return $binario !== false && $binario !== '' ? $binario : null;
+    }
+
+    /**
+     * Solo se guardan imágenes de verdad, y se guardan redibujadas.
+     *
+     * Antes se aceptaba cualquier base64 con extensión .jpg. Ahora se exige
+     * que sea JPEG, PNG o WebP y se vuelve a codificar con GD: lo que se
+     * guarda son los píxeles y nada más. Se cae cualquier contenido escondido
+     * en el archivo y también los metadatos EXIF, que en una foto de celular
+     * traen las coordenadas exactas de la casa del cliente.
+     */
+    private function imagenLimpia(string $binario, string $formato, string $campo): string
+    {
+        $info = @getimagesizefromstring($binario);
+        $rechazo = ValidationException::withMessages([$campo => 'El archivo no es una imagen válida.']);
+
+        if ($info === false || ! in_array($info['mime'], self::TIPOS_IMAGEN, true)) {
+            throw $rechazo;
+        }
+
+        // Una imagen pequeña en bytes puede declarar dimensiones enormes y
+        // agotar la memoria al abrirla.
+        if ($info[0] * $info[1] > self::MAX_PIXELES) {
+            throw ValidationException::withMessages([$campo => 'La imagen es demasiado grande.']);
+        }
+
+        if (! function_exists('imagecreatefromstring')) {
+            return $binario;
+        }
+
+        $imagen = @imagecreatefromstring($binario);
+
+        if ($imagen === false) {
+            throw $rechazo;
+        }
+
+        ob_start();
+
+        if ($formato === 'png') {
+            imagesavealpha($imagen, true);
+            imagepng($imagen);
+        } else {
+            imagejpeg($imagen, null, 85);
+        }
+
+        return (string) ob_get_clean();
     }
 
     /* ---------------------------------------------------------------

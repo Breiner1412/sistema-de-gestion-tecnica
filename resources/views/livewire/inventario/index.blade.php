@@ -2,11 +2,11 @@
 
 use App\Models\Inventario;
 use App\Models\MovimientoInventario;
-use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
@@ -22,7 +22,10 @@ new #[Layout('layouts.app')] class extends Component {
 
     public string $panel = '';
 
+    // Los ids los ponen editarMaterial() y moverStock(): el navegador no los
+    // puede cambiar por los de otro material entre abrir y guardar el panel.
     // Material
+    #[Locked]
     public ?int $material_id = null;
     public string $nombre = '';
     public string $tipo = 'cable';
@@ -30,13 +33,14 @@ new #[Layout('layouts.app')] class extends Component {
     public string $precio_unitario = '';
 
     // Movimiento
+    #[Locked]
     public ?int $movimiento_material_id = null;
     public string $movimiento_tipo = 'entrada';
     public string $movimiento_cantidad = '';
 
     public function mount(): void
     {
-        abort_unless(auth()->user()->tieneRol(User::ROL_ADMIN, User::ROL_GERENTE), 403);
+        $this->authorize('viewAny', Inventario::class);
     }
 
     public function updated($propiedad): void
@@ -67,6 +71,7 @@ new #[Layout('layouts.app')] class extends Component {
     public function editarMaterial(int $id): void
     {
         $material = Inventario::findOrFail($id);
+        $this->authorize('update', $material);
 
         $this->material_id = $material->id;
         $this->nombre = $material->nombre;
@@ -78,6 +83,10 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function guardarMaterial(): void
     {
+        $this->material_id
+            ? $this->authorize('update', Inventario::findOrFail($this->material_id))
+            : $this->authorize('create', Inventario::class);
+
         $datos = $this->validate([
             'nombre' => ['required', 'string', 'max:120', Rule::unique('inventario', 'nombre')->ignore($this->material_id)],
             'tipo' => ['required', 'string', 'max:40'],
@@ -108,7 +117,7 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function moverStock(int $id): void
     {
-        $this->movimiento_material_id = $id;
+        $this->movimiento_material_id = Inventario::findOrFail($id)->id;
         $this->movimiento_tipo = 'entrada';
         $this->movimiento_cantidad = '';
         $this->panel = 'movimiento';
@@ -123,24 +132,37 @@ new #[Layout('layouts.app')] class extends Component {
         ], [], ['movimiento_cantidad' => 'cantidad']);
 
         $material = Inventario::findOrFail($this->movimiento_material_id);
+        $this->authorize('update', $material);
         $cantidad = (int) $this->movimiento_cantidad;
 
-        if ($this->movimiento_tipo === 'salida' && $material->cantidad_total < $cantidad) {
-            $this->addError('movimiento_cantidad', "Solo hay {$material->cantidad_total} unidades disponibles.");
-            return;
-        }
+        $aplicado = DB::transaction(function () use ($material, $cantidad) {
+            // La salida lleva la condición en el UPDATE, como el consumo de
+            // las visitas: dos salidas simultáneas no dejan el stock negativo.
+            $filas = $this->movimiento_tipo === 'entrada'
+                ? Inventario::whereKey($material->id)->increment('cantidad_total', $cantidad)
+                : Inventario::whereKey($material->id)
+                    ->where('cantidad_total', '>=', $cantidad)
+                    ->decrement('cantidad_total', $cantidad);
 
-        DB::transaction(function () use ($material, $cantidad) {
-            $this->movimiento_tipo === 'entrada'
-                ? $material->increment('cantidad_total', $cantidad)
-                : $material->decrement('cantidad_total', $cantidad);
+            if ($filas === 0) {
+                return false;
+            }
 
             MovimientoInventario::create([
                 'material_id' => $material->id,
                 'tipo' => $this->movimiento_tipo,
                 'cantidad' => $cantidad,
             ]);
+
+            return true;
         });
+
+        if (! $aplicado) {
+            $disponible = Inventario::whereKey($material->id)->value('cantidad_total');
+            $this->addError('movimiento_cantidad', "Solo hay {$disponible} unidades disponibles.");
+
+            return;
+        }
 
         $this->panel = '';
         unset($this->bajos);
