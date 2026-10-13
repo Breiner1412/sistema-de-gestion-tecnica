@@ -8,6 +8,7 @@ use App\Services\CierreDeVisita;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
@@ -66,9 +67,23 @@ new #[Layout('layouts.app')] class extends Component {
         return auth()->user()->can('update', $this->orden);
     }
 
+    /**
+     * Una visita cerrada ya movió el caso y el inventario: reabrirla o tocar
+     * su material desde aquí descuadraba los dos sin pasar por ninguna regla.
+     */
+    private function exigirAbierta(): void
+    {
+        if (! $this->orden->refresh()->estaAbierta()) {
+            throw ValidationException::withMessages([
+                'estado' => 'La visita ya está cerrada y no se puede modificar.',
+            ]);
+        }
+    }
+
     public function agregarMaterial(): void
     {
         $this->authorize('update', $this->orden);
+        $this->exigirAbierta();
 
         $this->validate([
             'material_id' => 'required|exists:inventario,id',
@@ -95,6 +110,7 @@ new #[Layout('layouts.app')] class extends Component {
     public function quitarMaterial(int $id): void
     {
         $this->authorize('update', $this->orden);
+        $this->exigirAbierta();
 
         DB::transaction(fn () => MaterialOrden::where('orden_id', $this->orden->id)->whereKey($id)->first()?->delete());
 
@@ -107,9 +123,10 @@ new #[Layout('layouts.app')] class extends Component {
     public function actualizar(): void
     {
         $this->authorize('update', $this->orden);
+        $this->exigirAbierta();
 
         $reglas = [
-            'estado' => [Rule::in(array_keys(OrdenTrabajo::ESTADOS))],
+            'estado' => ['required', Rule::in(array_keys(OrdenTrabajo::ESTADOS))],
             'observaciones' => ['nullable', 'string'],
         ];
 
@@ -271,7 +288,7 @@ new #[Layout('layouts.app')] class extends Component {
     </div>
 
     {{-- Estado --}}
-    @if ($this->puedeEditar)
+    @if ($this->puedeEditar && $orden->estaAbierta())
         <form wire:submit="actualizar" class="space-y-4 bg-white border rounded p-4">
             <div>
                 <label class="block font-medium mb-1 text-slate-800">Estado de la visita</label>
