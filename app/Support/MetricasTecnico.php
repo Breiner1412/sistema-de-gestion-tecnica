@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Support;
 
 use App\Models\InformeMensual;
@@ -66,6 +68,9 @@ class MetricasTecnico
             ->select('estado', DB::raw('count(*) as total'))
             ->groupBy('estado')
             ->pluck('total', 'estado')
+            // MySQL devuelve los conteos como texto: se pasan a entero para que
+            // el informe (y su snapshot JSON) sea igual en cualquier motor.
+            ->map(fn ($cantidad) => (int) $cantidad)
             ->all();
 
         // El agrupado por día se hace en PHP a propósito: day() es de MySQL y
@@ -99,7 +104,8 @@ class MetricasTecnico
         $sinContacto = ($porEstado[Soporte::ESTADO_SIN_CONTACTO] ?? 0)
             + ($porEstado[Soporte::ESTADO_CERRADO_SIN_CONTACTO] ?? 0);
 
-        $promedio = $resumen->promedio;
+        // AVG() llega como texto desde MySQL.
+        $promedio = $resumen->promedio !== null ? (float) $resumen->promedio : null;
 
         return [
             'anio' => $this->anio,
@@ -143,12 +149,14 @@ class MetricasTecnico
             ->whereBetween('soportes.created_at', [$this->inicio(), $this->fin()])
             ->select('tecnico_soporte_id', DB::raw('count(*) as total'))
             ->groupBy('tecnico_soporte_id')
-            ->pluck('total', 'tecnico_soporte_id');
+            ->pluck('total', 'tecnico_soporte_id')
+            ->map(fn ($cantidad) => (int) $cantidad);
 
         $promedioResolucion = Soporte::whereNotNull('tecnico_soporte_id')
             ->whereNotNull('tiempo_resolucion')
             ->whereBetween('soportes.created_at', [$this->inicio(), $this->fin()])
             ->avg('tiempo_resolucion');
+        $promedioResolucion = $promedioResolucion !== null ? (float) $promedioResolucion : null;
 
         $mios = $porTecnico[$this->tecnico->id] ?? 0;
         $ordenados = $porTecnico->sortDesc()->keys()->all();
