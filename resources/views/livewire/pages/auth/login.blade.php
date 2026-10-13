@@ -35,50 +35,53 @@ new #[Layout('layouts.guest')] class extends Component
 }; ?>
 
 <div>
+    <h1 class="text-[22px] font-semibold leading-tight">Entrar</h1>
+    <p class="mt-1 text-sm text-tinta-3">Mesa de soporte técnico: casos, visitas y SLA.</p>
+
     @if ($cuentasDemo->isNotEmpty() && filled($claveDemo))
-        <div class="mb-6 rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-            <p class="font-semibold">Demo pública</p>
-            <p class="mt-1">
+        <section class="mt-5 rounded-tarjeta border border-acento/30 bg-acento-tinte p-4 text-sm" aria-labelledby="demo-titulo">
+            <p id="demo-titulo" class="font-semibold text-acento-tinte-texto">Demo pública</p>
+            <p class="mt-1 text-tinta-2">
                 Entre con cualquiera de estas cuentas. La contraseña es
-                <code class="rounded bg-white px-1 font-mono">{{ $claveDemo }}</code>.
+                <code class="rounded-[4px] bg-superficie px-1.5 py-0.5 font-mono text-[13px] text-tinta">{{ $claveDemo }}</code>.
             </p>
 
-            <ul class="mt-3 space-y-1">
+            <ul class="mt-3 flex flex-col gap-1">
                 @foreach ($cuentasDemo as $cuenta)
                     <li>
                         <button type="button"
-                                class="text-left underline hover:text-blue-700"
+                                class="flex w-full flex-col items-start rounded-control px-2 py-1.5 text-left transition-colors hover:bg-superficie"
                                 x-on:click="$wire.set('form.email', @js($cuenta->email)); $wire.set('form.password', @js($claveDemo))">
-                            {{ $cuenta->etiquetaRol() }}
+                            <span class="font-medium text-acento-texto">{{ $cuenta->etiquetaRol() }}</span>
+                            <span class="font-mono text-xs text-tinta-3">{{ $cuenta->email }}</span>
                         </button>
-                        <span class="text-blue-700">· {{ $cuenta->email }}</span>
                     </li>
                 @endforeach
             </ul>
 
-            <p class="mt-3 text-blue-800">
+            <p class="mt-3 border-t border-acento/20 pt-3 text-[13px] text-tinta-2">
                 Los datos se reinician todas las noches a las {{ $horaReinicio }} (hora de Colombia):
                 lo que haga aquí no dura más de un día, y a esa hora se cierran todas las sesiones.
             </p>
-        </div>
+        </section>
     @endif
 
     <!-- Session Status -->
-    <x-auth-session-status class="mb-4" :status="session('status')" />
+    <x-auth-session-status class="mt-4" :status="session('status')" />
 
-    <form wire:submit="login">
+    <form wire:submit="login" class="mt-5 flex flex-col gap-4">
         <!-- Email Address -->
         <div>
             <x-input-label for="email" :value="__('Email')" />
-            <x-text-input wire:model="form.email" id="email" class="block mt-1 w-full" type="email" name="email" required autofocus autocomplete="username" />
+            <x-text-input wire:model="form.email" id="email" class="block w-full" type="email" name="email" required autofocus autocomplete="username" />
             <x-input-error :messages="$errors->get('form.email')" class="mt-2" />
         </div>
 
         <!-- Password -->
-        <div class="mt-4">
+        <div>
             <x-input-label for="password" :value="__('Password')" />
 
-            <x-text-input wire:model="form.password" id="password" class="block mt-1 w-full"
+            <x-text-input wire:model="form.password" id="password" class="block w-full"
                             type="password"
                             name="password"
                             required autocomplete="current-password" />
@@ -87,23 +90,19 @@ new #[Layout('layouts.guest')] class extends Component
         </div>
 
         <!-- Remember Me -->
-        <div class="block mt-4">
-            <label for="remember" class="inline-flex items-center">
-                <input wire:model="form.remember" id="remember" type="checkbox" class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500" name="remember">
-                <span class="ms-2 text-sm text-gray-600">{{ __('Remember me') }}</span>
-            </label>
-        </div>
+        <label for="remember" class="inline-flex items-center gap-2 text-sm text-tinta-2">
+            <input wire:model="form.remember" id="remember" type="checkbox" class="size-4 rounded border-linea bg-superficie text-acento focus:ring-acento-texto" name="remember">
+            {{ __('Remember me') }}
+        </label>
 
-        <div class="flex items-center justify-end mt-4">
-            @if (Route::has('password.request'))
-                <a class="underline text-sm text-gray-600 hover:text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500" href="{{ route('password.request') }}" wire:navigate>
-                    {{ __('Forgot your password?') }}
-                </a>
-            @endif
+        <x-primary-button class="h-10 w-full">
+            {{ __('Log in') }}
+        </x-primary-button>
 
-            <x-primary-button class="ms-3">
-                {{ __('Log in') }}
-            </x-primary-button>
-        </div>
+        @if (Route::has('password.request'))
+            <a class="self-center text-sm" href="{{ route('password.request') }}" wire:navigate>
+                {{ __('Forgot your password?') }}
+            </a>
+        @endif
     </form>
 </div>

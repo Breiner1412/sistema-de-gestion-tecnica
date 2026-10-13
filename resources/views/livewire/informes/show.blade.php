@@ -154,7 +154,7 @@ new #[Layout('layouts.app')] class extends Component {
                 $fila = 'flex justify-between gap-3 border-b border-linea-suave py-1.5 last:border-b-0';
                 $cifra = 'font-mono font-medium text-tinta';
             @endphp
-            <div class="grid gap-4 md:grid-cols-2 print:grid-cols-2">
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2 print:grid-cols-2">
                 <section class="rounded-tarjeta border border-linea p-4">
                     <h2 class="titulo-seccion mb-2">Ritmo de trabajo</h2>
                     <dl class="text-sm text-tinta-2">
@@ -211,7 +211,7 @@ new #[Layout('layouts.app')] class extends Component {
                 </div>
             </section>
 
-            <div class="grid gap-4 md:grid-cols-2 print:grid-cols-2">
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2 print:grid-cols-2">
                 {{-- Por falla --}}
                 <section class="rounded-tarjeta border border-linea p-4">
                     <h2 class="titulo-seccion mb-3">Fallas reportadas</h2>

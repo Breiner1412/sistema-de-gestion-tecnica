@@ -179,207 +179,228 @@ new #[Layout('layouts.app')] class extends Component {
     }
 }; ?>
 
-<div class="p-6 max-w-3xl">
+<div class="mx-auto flex max-w-[1100px] flex-col gap-4 px-4 py-5 sm:px-6 lg:py-6">
+    <x-mensajes />
 
-    @if (session('mensaje'))
-        <div class="bg-green-100 text-green-800 p-3 rounded mb-4">{{ session('mensaje') }}</div>
-    @endif
-    @if (session('error'))
-        <div class="bg-red-100 text-red-800 p-3 rounded mb-4">{{ session('error') }}</div>
-    @endif
-
-    <a href="{{ route('soportes.show', $orden->soporte) }}" wire:navigate class="text-blue-600 text-sm">
-        &larr; Volver al caso
-    </a>
-
-    <div class="flex flex-wrap items-center gap-3 mt-2 mb-4">
-        <h1 class="text-2xl font-bold text-slate-800">Visita #{{ $orden->id }}</h1>
-        <span @class([
-            'px-3 py-1 rounded text-sm font-semibold',
-            'bg-yellow-200 text-yellow-900' => $orden->estado === 'pendiente',
-            'bg-indigo-200 text-indigo-900' => $orden->estado === 'programada',
-            'bg-blue-200 text-blue-900' => $orden->estado === 'en_progreso',
-            'bg-green-200 text-green-900' => $orden->estado === 'completado',
-            'bg-red-200 text-red-900' => $orden->estado === 'no_realizada',
-        ])>{{ $orden->etiquetaEstado() }}</span>
-    </div>
-
-    <div class="bg-slate-50 border rounded p-4 mb-4 grid gap-x-6 gap-y-1 text-sm md:grid-cols-2">
-        <p><span class="font-semibold">Caso:</span> {{ $orden->soporte->numero_soporte ?? '#'.$orden->soporte->id }}</p>
-        <p><span class="font-semibold">Cliente:</span> {{ $orden->soporte->cliente->nombre }}</p>
-        <p><span class="font-semibold">Dirección:</span> {{ $orden->soporte->cliente->direccion ?? '—' }}</p>
-        <p><span class="font-semibold">Teléfono:</span> {{ $orden->soporte->cliente->telefono ?? '—' }}</p>
-        <p><span class="font-semibold">Técnico:</span> {{ $orden->tecnico->user->name ?? $orden->tecnico->nombre }}</p>
-        <p><span class="font-semibold">Tipo:</span> {{ \App\Models\OrdenTrabajo::TIPOS[$orden->tipo] ?? $orden->tipo }}</p>
-
-        @if ($orden->fecha_programada)
-            <p>
-                <span class="font-semibold">Programada:</span>
-                {{ $orden->fecha_programada->format('d/m/Y') }}
-                {{ \App\Models\OrdenTrabajo::FRANJAS[$orden->franja] ?? '' }}
-            </p>
-        @endif
-        @if ($orden->hora_inicio)
-            <p><span class="font-semibold">Inicio:</span> {{ $orden->hora_inicio->format('d/m/Y H:i') }}</p>
-        @endif
-        @if ($orden->hora_fin)
-            <p><span class="font-semibold">Fin:</span> {{ $orden->hora_fin->format('d/m/Y H:i') }}</p>
-        @endif
-        @if ($orden->cumplioProgramacion() === false)
-            <p class="md:col-span-2 text-orange-800">
-                <span class="font-semibold">Atención:</span> la visita no se ejecutó el día programado.
-            </p>
-        @endif
-
-        <p class="md:col-span-2 pt-2">
-            <span class="font-semibold">Problema reportado:</span> {{ $orden->soporte->descripcion }}
-        </p>
-    </div>
+    <x-encabezado :titulo="'Visita #'.$orden->id" :subtitulo="($orden->soporte->cliente->nombre ?? '—').' · '.(\App\Models\OrdenTrabajo::TIPOS[$orden->tipo] ?? $orden->tipo)">
+        <x-slot:antes>
+            <a href="{{ route('soportes.show', $orden->soporte) }}" wire:navigate class="inline-flex items-center gap-1 text-tinta-3 no-underline hover:text-acento-texto">
+                <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                Caso <span class="font-mono">{{ $orden->soporte->numero_soporte ?? '#'.$orden->soporte->id }}</span>
+            </a>
+        </x-slot:antes>
+        <x-slot:acciones>
+            <x-estado :estado="$orden->estado" :etiqueta="$orden->etiquetaEstado()" class="h-7 px-3 text-[13px]" />
+        </x-slot:acciones>
+    </x-encabezado>
 
     @unless ($this->puedeEditar)
-        <p class="bg-yellow-50 border border-yellow-200 text-yellow-800 p-3 rounded mb-4 text-sm">
+        <p class="flex items-center gap-2 rounded-tarjeta border border-linea bg-elevada px-4 py-3 text-sm text-tinta-2">
+            <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" stroke-width="1.5"></path></svg>
             Esta visita está asignada a otro técnico, solo puedes consultarla.
         </p>
     @endunless
 
-    {{-- Materiales --}}
-    <div class="bg-white border rounded p-4 mb-4">
-        <h2 class="font-semibold text-slate-800 mb-2">Materiales usados</h2>
+    <div class="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
+        <div class="flex min-w-0 flex-col gap-4">
+            <section class="tarjeta p-4">
+                <h2 class="titulo-seccion mb-3">Datos de la visita</h2>
+                <dl class="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+                    <div>
+                        <dt class="text-xs font-medium text-tinta-3">Cliente</dt>
+                        <dd class="font-medium">{{ $orden->soporte->cliente->nombre }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-tinta-3">Teléfono</dt>
+                        <dd class="font-mono text-[13px]">{{ $orden->soporte->cliente->telefono ?? '—' }}</dd>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <dt class="text-xs font-medium text-tinta-3">Dirección</dt>
+                        <dd>{{ $orden->soporte->cliente->direccion ?? '—' }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-tinta-3">Técnico</dt>
+                        <dd>{{ $orden->tecnico->user->name ?? $orden->tecnico->nombre }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-tinta-3">Tipo</dt>
+                        <dd>{{ \App\Models\OrdenTrabajo::TIPOS[$orden->tipo] ?? $orden->tipo }}</dd>
+                    </div>
+                    @if ($orden->fecha_programada)
+                        <div>
+                            <dt class="text-xs font-medium text-tinta-3">Programada</dt>
+                            <dd><span class="font-mono text-[13px]">{{ $orden->fecha_programada->format('d/m/Y') }}</span> {{ \App\Models\OrdenTrabajo::FRANJAS[$orden->franja] ?? '' }}</dd>
+                        </div>
+                    @endif
+                    @if ($orden->hora_inicio)
+                        <div>
+                            <dt class="text-xs font-medium text-tinta-3">Inicio</dt>
+                            <dd class="font-mono text-[13px]">{{ $orden->hora_inicio->format('d/m/Y H:i') }}</dd>
+                        </div>
+                    @endif
+                    @if ($orden->hora_fin)
+                        <div>
+                            <dt class="text-xs font-medium text-tinta-3">Fin</dt>
+                            <dd class="font-mono text-[13px]">{{ $orden->hora_fin->format('d/m/Y H:i') }}</dd>
+                        </div>
+                    @endif
+                </dl>
 
-        @if ($orden->materialesUsados->count())
-            <ul class="text-sm divide-y mb-3">
-                @foreach ($orden->materialesUsados as $uso)
-                    <li class="py-2 flex justify-between items-center">
-                        <span>{{ $uso->material->nombre ?? '—' }} × {{ $uso->cantidad_usada }}</span>
-                        @if ($this->puedeEditar && $orden->estaAbierta())
-                            <button wire:click="quitarMaterial({{ $uso->id }})"
-                                wire:confirm="¿Devolver este material al inventario?"
-                                class="text-red-600 text-xs">Quitar</button>
+                @if ($orden->cumplioProgramacion() === false)
+                    <p class="mt-3 inline-flex items-center gap-1.5 rounded bg-sla-atencion-fondo px-2 py-1 text-[13px] font-medium text-sla-atencion">
+                        <x-sla-glifo estado="atencion" :tamano="11" />
+                        La visita no se ejecutó el día programado.
+                    </p>
+                @endif
+
+                <div class="mt-4 border-t border-linea-suave pt-3">
+                    <p class="text-xs font-medium text-tinta-3">Problema reportado</p>
+                    <p class="mt-0.5 whitespace-pre-line text-sm">{{ $orden->soporte->descripcion }}</p>
+                </div>
+            </section>
+
+            {{-- Lo que el técnico dejó desde el celular. Vive aquí porque la oficina es
+                 quien lo mira: si la evidencia no se ve desde escritorio, tomarla no sirve. --}}
+            @if ($orden->evidencias->isNotEmpty() || $orden->firma_path || $orden->latitud_fin)
+                <section class="tarjeta p-4">
+                    <h2 class="titulo-seccion mb-3">Evidencia de la visita</h2>
+
+                    @if ($orden->cerradaEnDiferido())
+                        <p class="mb-3 rounded-control border border-dashed border-linea bg-elevada px-3 py-2 text-xs text-tinta-2">
+                            Se cerró en terreno el
+                            <span class="font-mono">{{ $orden->cerrada_en_terreno_at->format('d/m/Y \a \l\a\s H:i') }}</span>
+                            y se sincronizó cuando volvió la señal.
+                        </p>
+                    @endif
+
+                    @if ($orden->evidencias->isNotEmpty())
+                        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                            @foreach ($orden->evidencias as $evidencia)
+                                <a href="{{ $evidencia->url() }}" target="_blank" rel="noopener" class="block no-underline">
+                                    <img src="{{ $evidencia->url() }}" alt="Foto de la visita"
+                                         class="aspect-square w-full rounded-control border border-linea object-cover">
+                                    @if ($evidencia->descripcion)
+                                        <p class="mt-1 truncate text-xs text-tinta-3">{{ $evidencia->descripcion }}</p>
+                                    @endif
+                                </a>
+                            @endforeach
+                        </div>
+                    @endif
+
+                    <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                        @if ($orden->firma_path)
+                            <div>
+                                <p class="mb-1 text-xs font-medium text-tinta-3">Firma del cliente</p>
+                                {{-- Fondo blanco también en oscuro: la firma es tinta oscura. --}}
+                                <img src="{{ $orden->urlFirma() }}" alt="Firma del cliente"
+                                     class="h-24 rounded-control border border-linea bg-white p-2">
+                            </div>
                         @endif
-                    </li>
-                @endforeach
-            </ul>
-        @else
-            <p class="text-sm text-slate-500 mb-3">Sin materiales registrados.</p>
-        @endif
 
-        @if ($this->puedeEditar && $orden->estaAbierta())
-            <div class="flex flex-wrap gap-2 items-end">
-                <div class="flex-1 min-w-48">
-                    <label class="block text-xs font-medium text-slate-600 mb-1">Material</label>
-                    <select wire:model="material_id" class="w-full border rounded p-2 text-sm">
-                        <option value="">— Selecciona —</option>
-                        @foreach ($this->materiales as $m)
-                            <option value="{{ $m->id }}">{{ $m->nombre }} (stock: {{ $m->cantidad_total }})</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div class="w-24">
-                    <label class="block text-xs font-medium text-slate-600 mb-1">Cantidad</label>
-                    <input type="number" min="1" wire:model="cantidad_usada" class="w-full border rounded p-2 text-sm">
-                </div>
-                <button wire:click="agregarMaterial" class="bg-slate-700 text-white px-4 py-2 rounded text-sm">
-                    Agregar
-                </button>
-            </div>
-            @error('material_id') <p class="text-red-600 text-sm mt-1">{{ $message }}</p> @enderror
-            @error('cantidad_usada') <p class="text-red-600 text-sm mt-1">{{ $message }}</p> @enderror
-        @endif
-    </div>
-
-    {{-- Estado --}}
-    @if ($this->puedeEditar && $orden->estaAbierta())
-        <form wire:submit="actualizar" class="space-y-4 bg-white border rounded p-4">
-            <div>
-                <label class="block font-medium mb-1 text-slate-800">Estado de la visita</label>
-                <select wire:model.live="estado" class="w-full border rounded p-2">
-                    @foreach (\App\Models\OrdenTrabajo::ESTADOS as $valor => $etiqueta)
-                        <option value="{{ $valor }}">{{ $etiqueta }}</option>
-                    @endforeach
-                </select>
-            </div>
-
-            @if ($estado === 'completado')
-                <div>
-                    <label class="block font-medium mb-1 text-slate-800">Diagnóstico</label>
-                    <select wire:model="diagnostico_id" class="w-full border rounded p-2">
-                        <option value="">— Selecciona —</option>
-                        @foreach ($this->diagnosticos as $d)
-                            <option value="{{ $d->id }}">{{ $d->nombre }}</option>
-                        @endforeach
-                    </select>
-                    @error('diagnostico_id') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
-                    <p class="text-xs text-slate-500 mt-1">Al completar la visita el caso queda solucionado.</p>
-                </div>
-            @endif
-
-            @if ($estado === 'no_realizada')
-                <div>
-                    <label class="block font-medium mb-1 text-slate-800">¿Por qué no se pudo hacer?</label>
-                    <textarea wire:model="motivo_no_realizada" rows="2" class="w-full border rounded p-2"
-                        placeholder="Nadie en la vivienda, dirección errada, clima..."></textarea>
-                    @error('motivo_no_realizada') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
-                    <p class="text-xs text-slate-500 mt-1">El caso vuelve al nivel 2 y el reloj se reanuda.</p>
-                </div>
-            @endif
-
-            <div>
-                <label class="block font-medium mb-1 text-slate-800">Observaciones</label>
-                <textarea wire:model="observaciones" rows="4" class="w-full border rounded p-2"
-                    placeholder="Detalles del trabajo realizado..."></textarea>
-                @error('observaciones') <span class="text-red-600 text-sm">{{ $message }}</span> @enderror
-            </div>
-
-            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded">Guardar cambios</button>
-        </form>
-    @endif
-    {{-- Lo que el técnico dejó desde el celular. Vive aquí porque la oficina es
-         quien lo mira: si la evidencia no se ve desde escritorio, tomarla no sirve. --}}
-    @if ($orden->evidencias->isNotEmpty() || $orden->firma_path || $orden->latitud_fin)
-        <div class="mt-6 border-t pt-4">
-            <h2 class="font-semibold text-slate-800 mb-3">Evidencia de la visita</h2>
-
-            @if ($orden->cerradaEnDiferido())
-                <p class="mb-3 rounded bg-amber-50 p-2 text-xs text-amber-800">
-                    Se cerró en terreno el
-                    {{ $orden->cerrada_en_terreno_at->format('d/m/Y \a \l\a\s H:i') }}
-                    y se sincronizó cuando volvió la señal.
-                </p>
-            @endif
-
-            @if ($orden->evidencias->isNotEmpty())
-                <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    @foreach ($orden->evidencias as $evidencia)
-                        <a href="{{ $evidencia->url() }}" target="_blank" rel="noopener" class="block">
-                            <img src="{{ $evidencia->url() }}" alt="Foto de la visita"
-                                 class="aspect-square w-full rounded border object-cover">
-                            @if ($evidencia->descripcion)
-                                <p class="mt-1 truncate text-xs text-slate-500">{{ $evidencia->descripcion }}</p>
-                            @endif
-                        </a>
-                    @endforeach
-                </div>
-            @endif
-
-            <div class="mt-4 grid gap-4 sm:grid-cols-2">
-                @if ($orden->firma_path)
-                    <div>
-                        <p class="mb-1 text-sm font-medium text-slate-700">Firma del cliente</p>
-                        <img src="{{ $orden->urlFirma() }}" alt="Firma del cliente"
-                             class="h-24 rounded border bg-white p-2">
+                        @if ($orden->latitud_fin && $orden->longitud_fin)
+                            <div>
+                                <p class="mb-1 text-xs font-medium text-tinta-3">Dónde se cerró</p>
+                                <a class="font-mono text-[13px]" target="_blank" rel="noopener"
+                                   href="https://maps.google.com/?q={{ $orden->latitud_fin }},{{ $orden->longitud_fin }}">
+                                    {{ $orden->latitud_fin }}, {{ $orden->longitud_fin }}
+                                </a>
+                            </div>
+                        @endif
                     </div>
-                @endif
-
-                @if ($orden->latitud_fin && $orden->longitud_fin)
-                    <div>
-                        <p class="mb-1 text-sm font-medium text-slate-700">Dónde se cerró</p>
-                        <a class="text-sm text-blue-600" target="_blank" rel="noopener"
-                           href="https://maps.google.com/?q={{ $orden->latitud_fin }},{{ $orden->longitud_fin }}">
-                            {{ $orden->latitud_fin }}, {{ $orden->longitud_fin }}
-                        </a>
-                    </div>
-                @endif
-            </div>
+                </section>
+            @endif
         </div>
-    @endif
+
+        <div class="flex flex-col gap-4">
+            {{-- Materiales --}}
+            <section class="tarjeta p-4">
+                <h2 class="titulo-seccion mb-2">Materiales usados</h2>
+
+                @if ($orden->materialesUsados->count())
+                    <ul class="mb-3 divide-y divide-linea-suave text-sm">
+                        @foreach ($orden->materialesUsados as $uso)
+                            <li class="flex items-center justify-between gap-3 py-2">
+                                <span>{{ $uso->material->nombre ?? '—' }} <span class="font-mono text-tinta-3">× {{ $uso->cantidad_usada }}</span></span>
+                                @if ($this->puedeEditar && $orden->estaAbierta())
+                                    <x-boton variante="fantasma" tamano="chico" class="!text-peligro" wire:click="quitarMaterial({{ $uso->id }})"
+                                        wire:confirm="¿Devolver este material al inventario?">Quitar</x-boton>
+                                @endif
+                            </li>
+                        @endforeach
+                    </ul>
+                @else
+                    <p class="mb-3 text-sm text-tinta-3">Sin materiales registrados.</p>
+                @endif
+
+                @if ($this->puedeEditar && $orden->estaAbierta())
+                    <div class="flex flex-wrap items-end gap-2 border-t border-linea-suave pt-3">
+                        <div class="min-w-0 flex-1 basis-40">
+                            <label for="material" class="etiqueta text-[13px]">Material</label>
+                            <select id="material" wire:model="material_id" class="control h-9 py-0">
+                                <option value="">— Selecciona —</option>
+                                @foreach ($this->materiales as $m)
+                                    <option value="{{ $m->id }}">{{ $m->nombre }} (stock: {{ $m->cantidad_total }})</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="w-20">
+                            <label for="cantidad" class="etiqueta text-[13px]">Cantidad</label>
+                            <input id="cantidad" type="number" min="1" wire:model="cantidad_usada" class="control h-9 font-mono">
+                        </div>
+                        <x-boton wire:click="agregarMaterial">Agregar</x-boton>
+                    </div>
+                    @error('material_id') <p class="error-campo">{{ $message }}</p> @enderror
+                    @error('cantidad_usada') <p class="error-campo">{{ $message }}</p> @enderror
+                @endif
+            </section>
+
+            {{-- Estado --}}
+            @if ($this->puedeEditar && $orden->estaAbierta())
+                <form wire:submit="actualizar" class="tarjeta space-y-4 p-4">
+                    <h2 class="titulo-seccion">Registrar resultado</h2>
+                    <div>
+                        <label for="estado-visita" class="etiqueta">Estado de la visita</label>
+                        <select id="estado-visita" wire:model.live="estado" class="control h-9 py-0">
+                            @foreach (\App\Models\OrdenTrabajo::ESTADOS as $valor => $etiqueta)
+                                <option value="{{ $valor }}">{{ $etiqueta }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    @if ($estado === 'completado')
+                        <div>
+                            <label for="diagnostico" class="etiqueta">Diagnóstico</label>
+                            <select id="diagnostico" wire:model="diagnostico_id" class="control h-9 py-0">
+                                <option value="">— Selecciona —</option>
+                                @foreach ($this->diagnosticos as $d)
+                                    <option value="{{ $d->id }}">{{ $d->nombre }}</option>
+                                @endforeach
+                            </select>
+                            @error('diagnostico_id') <p class="error-campo">{{ $message }}</p> @enderror
+                            <p class="mt-1 text-xs text-tinta-3">Al completar la visita el caso queda solucionado.</p>
+                        </div>
+                    @endif
+
+                    @if ($estado === 'no_realizada')
+                        <div>
+                            <label for="motivo-no-realizada" class="etiqueta">¿Por qué no se pudo hacer?</label>
+                            <textarea id="motivo-no-realizada" wire:model="motivo_no_realizada" rows="2" class="control"
+                                placeholder="Nadie en la vivienda, dirección errada, clima..."></textarea>
+                            @error('motivo_no_realizada') <p class="error-campo">{{ $message }}</p> @enderror
+                            <p class="mt-1 text-xs text-tinta-3">El caso vuelve al nivel 2 y el reloj se reanuda.</p>
+                        </div>
+                    @endif
+
+                    <div>
+                        <label for="observaciones" class="etiqueta">Observaciones</label>
+                        <textarea id="observaciones" wire:model="observaciones" rows="4" class="control"
+                            placeholder="Detalles del trabajo realizado..."></textarea>
+                        @error('observaciones') <p class="error-campo">{{ $message }}</p> @enderror
+                    </div>
+
+                    <x-boton variante="primario" type="submit" class="w-full">Guardar cambios</x-boton>
+                </form>
+            @endif
+        </div>
+    </div>
 </div>

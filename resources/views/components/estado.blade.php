@@ -14,8 +14,11 @@
         'sin_contacto' => ['lleno', 'bg-estado-sincontacto'],
         'enviado_tecnico', 'programada' => ['lleno', 'bg-estado-enviado'],
         'escalado_n3' => ['rombo', 'bg-estado-escalado'],
+        // Registros (clientes, contratos, usuarios): activo y suspendido con punto lleno, retirado tachado.
+        'activo', 'activa' => ['lleno', 'bg-sla-ok-barra'],
+        'suspendido' => ['lleno', 'bg-sla-atencion-barra'],
         'solucionado', 'completado' => ['listo', 'text-sla-ok'],
-        'cancelado', 'cerrado_sin_contacto', 'no_realizada' => ['tachado', ''],
+        'cancelado', 'cerrado_sin_contacto', 'no_realizada', 'retirado' => ['tachado', ''],
         default => ['hueco', 'border-tinta-3'],
     };
 @endphp

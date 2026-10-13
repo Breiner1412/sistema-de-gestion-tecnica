@@ -129,165 +129,171 @@ new #[Layout('layouts.app')] class extends Component {
     }
 }; ?>
 
-<div class="p-6 space-y-6">
+<div class="mx-auto flex max-w-[1400px] flex-col gap-4 px-4 py-5 sm:px-6 lg:py-6">
 
-    <div class="flex flex-wrap items-center justify-between gap-3">
-        <h1 class="text-2xl font-bold text-slate-800">Panel de soporte</h1>
-        <select wire:model.live="rango" class="border rounded p-2 text-sm">
-            <option value="7">Últimos 7 días</option>
-            <option value="30">Últimos 30 días</option>
-            <option value="90">Últimos 90 días</option>
-            <option value="365">Último año</option>
-        </select>
+    <x-encabezado titulo="Panel de soporte" subtitulo="Cómo va la mesa en el periodo elegido.">
+        <x-slot:acciones>
+            <label for="rango" class="sr-only">Periodo</label>
+            <select id="rango" wire:model.live="rango" class="control h-9 w-auto py-0 pr-9">
+                <option value="7">Últimos 7 días</option>
+                <option value="30">Últimos 30 días</option>
+                <option value="90">Últimos 90 días</option>
+                <option value="365">Último año</option>
+            </select>
+        </x-slot:acciones>
+    </x-encabezado>
+
+    {{-- Indicadores: lo que pide acción va primero y es lo único con color. --}}
+    <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div class="tarjeta p-4">
+            <p class="text-[13px] font-medium text-tinta-3">Abiertos ahora</p>
+            <p class="mt-1 font-mono text-[32px] font-semibold leading-none">{{ number_format($abiertos) }}</p>
+            @if ($vencidos > 0)
+                <a href="{{ route('soportes.index', ['vista' => 'vencidos']) }}" wire:navigate
+                   class="mt-2 inline-flex h-[22px] items-center gap-1.5 rounded bg-sla-vencido px-[7px] text-xs font-semibold text-white no-underline hover:bg-sla-vencido-oscuro">
+                    <x-sla-glifo estado="vencido" :tamano="11" :invertido="true" />
+                    <span class="font-mono">{{ $vencidos }}</span> con SLA vencido
+                </a>
+            @else
+                <p class="mt-2 text-xs text-tinta-3">ninguno vencido</p>
+            @endif
+        </div>
+
+        <div class="tarjeta p-4">
+            <p class="text-[13px] font-medium text-tinta-3">Cumplimiento de SLA</p>
+            <p class="mt-1 font-mono text-[32px] font-semibold leading-none">
+                @if ($cumplimientoSla !== null)
+                    {{ $cumplimientoSla }}<span class="text-lg text-tinta-3">%</span>
+                @else
+                    <span class="font-sans text-xl text-tinta-3">Sin datos</span>
+                @endif
+            </p>
+            @if ($cumplimientoSla !== null)
+                <div class="mt-2.5 h-1.5 rounded-full bg-elevada" aria-hidden="true">
+                    <div class="h-1.5 rounded-full bg-acento" style="width: {{ $cumplimientoSla }}%"></div>
+                </div>
+            @endif
+            <p class="mt-1.5 text-xs text-tinta-3">sobre los casos ya cerrados</p>
+        </div>
+
+        <div class="tarjeta p-4">
+            <p class="text-[13px] font-medium text-tinta-3">Casos registrados</p>
+            <p class="mt-1 font-mono text-[32px] font-semibold leading-none">{{ number_format($total) }}</p>
+            <p class="mt-2 text-xs text-tinta-3"><span class="font-mono text-tinta">{{ $inmediatos }}</span> inmediatos · <span class="font-mono text-tinta">{{ $escalados }}</span> escalados a redes</p>
+        </div>
+
+        <div class="tarjeta p-4">
+            <p class="text-[13px] font-medium text-tinta-3">Sin contacto</p>
+            <p class="mt-1 font-mono text-[32px] font-semibold leading-none">{{ $tasaSinContacto }}<span class="text-lg text-tinta-3">%</span></p>
+            <p class="mt-2 text-xs text-tinta-3">del total del periodo</p>
+        </div>
     </div>
 
-    {{-- Indicadores --}}
-    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    {{-- Tiempos --}}
+    <div class="tarjeta grid divide-y divide-linea sm:grid-cols-3 sm:divide-x sm:divide-y-0">
         @php
-            $tarjetas = [
-                ['Casos registrados', number_format($total), $inmediatos.' inmediatos'],
-                ['Abiertos ahora', number_format($abiertos), $vencidos > 0 ? $vencidos.' con SLA vencido' : 'ninguno vencido'],
-                ['Cumplimiento de SLA', $cumplimientoSla !== null ? $cumplimientoSla.'%' : 'Sin datos', 'sobre los casos ya cerrados'],
-                ['Sin contacto', $tasaSinContacto.'%', 'del total del periodo'],
+            $tiempos = [
+                ['Tiempo medio de respuesta', $promRespuesta !== null ? $promRespuesta : null, 'min', 'Del ingreso a la asignación, en minutos hábiles.'],
+                ['Tiempo medio de resolución', $promResolucion !== null ? $promResolucion : null, 'min', 'Del ingreso al cierre, en minutos hábiles.'],
+                ['Visitas en la fecha pactada', $cumplimientoVisitas, '%', 'Visitas ejecutadas el día para el que se programaron.'],
             ];
         @endphp
-
-        @foreach ($tarjetas as [$titulo, $valor, $pie])
-            <div class="bg-white border rounded p-4">
-                <p class="text-xs uppercase tracking-wide text-slate-500">{{ $titulo }}</p>
-                <p class="text-3xl font-bold text-slate-800 mt-1">{{ $valor }}</p>
-                <p class="text-xs text-slate-500 mt-1">{{ $pie }}</p>
+        @foreach ($tiempos as [$titulo, $valor, $unidad, $pie])
+            <div class="p-4">
+                <p class="text-[13px] font-medium text-tinta-3">{{ $titulo }}</p>
+                <p class="mt-1 font-mono text-2xl font-semibold">
+                    @if ($valor !== null)
+                        {{ $valor }}<span class="ml-0.5 text-sm text-tinta-3">{{ $unidad }}</span>
+                    @else
+                        <span class="font-sans text-lg text-tinta-3">Sin datos</span>
+                    @endif
+                </p>
+                <p class="mt-1 text-xs text-tinta-3">{{ $pie }}</p>
             </div>
         @endforeach
     </div>
 
-    {{-- Tiempos --}}
-    <div class="grid gap-4 sm:grid-cols-3">
-        <div class="bg-white border rounded p-4">
-            <p class="text-xs uppercase tracking-wide text-slate-500">Tiempo medio de respuesta</p>
-            <p class="text-2xl font-bold text-slate-800 mt-1">
-                {{ $promRespuesta !== null ? $promRespuesta.' min' : 'Sin datos' }}
-            </p>
-            <p class="text-xs text-slate-500 mt-1">Del ingreso a la asignación, en minutos hábiles.</p>
-        </div>
-        <div class="bg-white border rounded p-4">
-            <p class="text-xs uppercase tracking-wide text-slate-500">Tiempo medio de resolución</p>
-            <p class="text-2xl font-bold text-slate-800 mt-1">
-                {{ $promResolucion !== null ? $promResolucion.' min' : 'Sin datos' }}
-            </p>
-            <p class="text-xs text-slate-500 mt-1">Del ingreso al cierre, en minutos hábiles.</p>
-        </div>
-        <div class="bg-white border rounded p-4">
-            <p class="text-xs uppercase tracking-wide text-slate-500">Visitas en la fecha pactada</p>
-            <p class="text-2xl font-bold text-slate-800 mt-1">
-                {{ $cumplimientoVisitas !== null ? $cumplimientoVisitas.'%' : 'Sin datos' }}
-            </p>
-            <p class="text-xs text-slate-500 mt-1">Visitas ejecutadas el día para el que se programaron.</p>
-        </div>
-    </div>
-
-    <div class="grid gap-6 lg:grid-cols-2">
+    <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
 
         {{-- Estados --}}
-        <div class="bg-white border rounded p-4">
-            <h2 class="font-semibold text-slate-800 mb-3">Casos por estado</h2>
-            @forelse (\App\Models\Soporte::ESTADOS as $clave => $etiqueta)
+        <section class="tarjeta p-4">
+            <h2 class="titulo-seccion mb-3">Casos por estado</h2>
+            @php $hayEstados = false; @endphp
+            @foreach (\App\Models\Soporte::ESTADOS as $clave => $etiqueta)
                 @php $valor = $porEstado[$clave] ?? 0; @endphp
                 @if ($valor)
-                    <div class="mb-2">
-                        <div class="flex justify-between text-sm text-slate-700">
-                            <span>{{ $etiqueta }}</span>
-                            <span class="font-medium">{{ $valor }}</span>
-                        </div>
-                        <div class="h-2 bg-slate-100 rounded mt-1">
-                            <div class="h-2 bg-blue-500 rounded" style="width: {{ $total ? round($valor / $total * 100) : 0 }}%"></div>
-                        </div>
-                    </div>
+                    @php $hayEstados = true; @endphp
+                    <x-barra :etiqueta="$etiqueta" :valor="$valor" :maximo="$total" />
                 @endif
-            @empty
-                <p class="text-sm text-slate-500">Sin datos en el rango.</p>
-            @endforelse
-        </div>
+            @endforeach
+            @unless ($hayEstados)
+                <p class="text-sm text-tinta-3">Sin datos en el rango.</p>
+            @endunless
+        </section>
 
         {{-- Canal de ingreso --}}
-        <div class="bg-white border rounded p-4">
-            <h2 class="font-semibold text-slate-800 mb-3">¿Por dónde entran los casos?</h2>
+        <section class="tarjeta p-4">
+            <h2 class="titulo-seccion mb-3">¿Por dónde entran los casos?</h2>
             @forelse ($porCanal as $canal => $valor)
-                <div class="mb-2">
-                    <div class="flex justify-between text-sm text-slate-700">
-                        <span>{{ \App\Models\Soporte::CANALES[$canal] ?? $canal }}</span>
-                        <span class="font-medium">{{ $valor }}</span>
-                    </div>
-                    <div class="h-2 bg-slate-100 rounded mt-1">
-                        <div class="h-2 bg-emerald-500 rounded" style="width: {{ $total ? round($valor / $total * 100) : 0 }}%"></div>
-                    </div>
-                </div>
+                <x-barra :etiqueta="\App\Models\Soporte::CANALES[$canal] ?? $canal" :valor="$valor" :maximo="$total" color="bg-tinta-3" />
             @empty
-                <p class="text-sm text-slate-500">Sin datos en el rango.</p>
+                <p class="text-sm text-tinta-3">Sin datos en el rango.</p>
             @endforelse
-            <p class="text-xs text-slate-500 mt-3">
+            <p class="mt-3 text-xs text-tinta-3">
                 Solo se registran los casos que el primer nivel no pudo resolver en el momento.
             </p>
-        </div>
+        </section>
 
         {{-- Tipos --}}
-        <div class="bg-white border rounded p-4">
-            <h2 class="font-semibold text-slate-800 mb-3">Casos por tipo de solicitud</h2>
+        <section class="tarjeta p-4">
+            <h2 class="titulo-seccion mb-3">Casos por tipo de solicitud</h2>
             @forelse ($porTipo as $tipo => $valor)
-                <div class="mb-2">
-                    <div class="flex justify-between text-sm text-slate-700">
-                        <span>{{ \App\Models\Soporte::TIPOS_SOLICITUD[$tipo] ?? $tipo }}</span>
-                        <span class="font-medium">{{ $valor }}</span>
-                    </div>
-                    <div class="h-2 bg-slate-100 rounded mt-1">
-                        <div class="h-2 bg-indigo-500 rounded" style="width: {{ $total ? round($valor / $total * 100) : 0 }}%"></div>
-                    </div>
-                </div>
+                <x-barra :etiqueta="\App\Models\Soporte::TIPOS_SOLICITUD[$tipo] ?? $tipo" :valor="$valor" :maximo="$total" color="bg-tinta-3" />
             @empty
-                <p class="text-sm text-slate-500">Sin datos en el rango.</p>
+                <p class="text-sm text-tinta-3">Sin datos en el rango.</p>
             @endforelse
-        </div>
+        </section>
 
         {{-- Diagnósticos --}}
-        <div class="bg-white border rounded p-4">
-            <h2 class="font-semibold text-slate-800 mb-3">Diagnósticos más frecuentes</h2>
+        <section class="tarjeta p-4">
+            <h2 class="titulo-seccion mb-2">Diagnósticos más frecuentes</h2>
             @forelse ($topDiagnosticos as $nombre => $valor)
-                <div class="flex justify-between text-sm text-slate-700 py-1 border-b last:border-0">
-                    <span>{{ $nombre }}</span>
-                    <span class="font-medium">{{ $valor }}</span>
+                <div class="flex justify-between gap-3 border-b border-linea-suave py-1.5 text-sm last:border-0">
+                    <span class="text-tinta-2">{{ $nombre }}</span>
+                    <span class="font-mono font-medium">{{ $valor }}</span>
                 </div>
             @empty
-                <p class="text-sm text-slate-500">Todavía no hay casos diagnosticados en este rango.</p>
+                <p class="text-sm text-tinta-3">Todavía no hay casos diagnosticados en este rango.</p>
             @endforelse
-        </div>
+        </section>
 
         {{-- Carga por técnico --}}
-        <div class="bg-white border rounded p-4 overflow-x-auto lg:col-span-2">
-            <h2 class="font-semibold text-slate-800 mb-3">Carga por técnico de soporte</h2>
+        <section class="lg:col-span-2">
+            <h2 class="titulo-seccion mb-2">Carga por técnico de soporte</h2>
             @if ($porTecnico->count())
-                <table class="w-full text-sm">
+                <x-tabla minimo="520px">
                     <thead>
-                        <tr class="text-left text-slate-500 border-b">
-                            <th class="py-1 font-medium">Técnico</th>
-                            <th class="py-1 font-medium text-right">Casos</th>
-                            <th class="py-1 font-medium text-right">Resueltos</th>
-                            <th class="py-1 font-medium text-right">Prom. min hábiles</th>
+                        <tr>
+                            <th>Técnico</th>
+                            <th class="text-right">Casos</th>
+                            <th class="text-right">Resueltos</th>
+                            <th class="text-right">Prom. min hábiles</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach ($porTecnico as $fila)
-                            <tr class="border-b last:border-0">
-                                <td class="py-1">{{ $fila->name }}</td>
-                                <td class="py-1 text-right">{{ $fila->total }}</td>
-                                <td class="py-1 text-right">{{ $fila->solucionados }}</td>
-                                <td class="py-1 text-right">{{ $fila->promedio ? round($fila->promedio) : '—' }}</td>
+                            <tr>
+                                <td class="font-medium">{{ $fila->name }}</td>
+                                <td class="text-right font-mono">{{ $fila->total }}</td>
+                                <td class="text-right font-mono text-tinta-2">{{ $fila->solucionados }}</td>
+                                <td class="text-right font-mono text-tinta-2">{{ $fila->promedio ? round($fila->promedio) : '—' }}</td>
                             </tr>
                         @endforeach
                     </tbody>
-                </table>
+                </x-tabla>
             @else
-                <p class="text-sm text-slate-500">Sin casos asignados en el rango.</p>
+                <p class="tarjeta p-4 text-sm text-tinta-3">Sin casos asignados en el rango.</p>
             @endif
-        </div>
+        </section>
     </div>
 </div>
