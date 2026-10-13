@@ -45,6 +45,22 @@ class ImportarHistorico extends Command
 
     private const NOTA_IMPORTACION = 'Caso importado del histórico de la operación.';
 
+    /** El histórico real pesa menos de 1 MB: 20 es de sobra y frena lo absurdo. */
+    private const MAX_BYTES = 20 * 1024 * 1024;
+
+    /** Una fila del histórico ocupa unos 150 caracteres. */
+    private const MAX_LINEA = 8192;
+
+    private const COLUMNAS_CLIENTES = ['codigo_abonado', 'cedula', 'nombre', 'telefono'];
+
+    private const COLUMNAS_CASOS = [
+        'codigo_abonado', 'tipo_solicitud', 'canal_ingreso', 'servicio_afectado', 'falla', 'diagnostico',
+        'estado', 'fecha_ingreso', 'fecha_cierre', 'asesor_idx', 'tecnico_idx', 'escalado',
+    ];
+
+    /** Filas que no tenían el número de columnas del encabezado. */
+    private int $malformadas = 0;
+
     public function handle(): int
     {
         $rutaCasos = $this->resolver($this->option('casos'));
@@ -127,8 +143,14 @@ class ImportarHistorico extends Command
         $lote = [];
         $nuevos = 0;
         $refrescar = [];
+        $omitidos = 0;
 
-        foreach ($this->filas($ruta) as $fila) {
+        foreach ($this->filas($ruta, self::COLUMNAS_CLIENTES) as $fila) {
+            if (! $this->clienteValido($fila)) {
+                $omitidos++;
+                continue;
+            }
+
             if (isset($existentes[$fila['codigo_abonado']])) {
                 // Por defecto no se toca lo que ya esta: el importador se corre
                 // muchas veces y no debe pisar lo que alguien edito a mano. Con
@@ -166,7 +188,8 @@ class ImportarHistorico extends Command
             $nuevos += count($lote);
         }
 
-        $this->line("  {$nuevos} clientes nuevos.");
+        $this->line("  {$nuevos} clientes nuevos.".($omitidos ? " {$omitidos} omitidos por datos incompletos." : ''));
+        $this->avisarMalformadas();
 
         if ($refrescar !== []) {
             $this->refrescar($refrescar);
@@ -232,7 +255,7 @@ class ImportarHistorico extends Command
         $barra = $this->output->createProgressBar();
         $barra->start();
 
-        foreach ($this->filas($ruta) as $fila) {
+        foreach ($this->filas($ruta, self::COLUMNAS_CASOS) as $fila) {
             if ($limite > 0 && $importados >= $limite) {
                 break;
             }
@@ -250,15 +273,17 @@ class ImportarHistorico extends Command
             }
 
             $clienteId = $clientes[$fila['codigo_abonado']] ?? null;
-            $ingreso = $fila['fecha_ingreso'] ? CarbonImmutable::parse($fila['fecha_ingreso']) : null;
+            $ingreso = $this->fecha($fila['fecha_ingreso']);
 
-            // Un puñado de filas del Excel traía fechas imposibles o en el futuro.
-            if (!$clienteId || !$ingreso || $ingreso->isFuture()) {
+            // Un puñado de filas del Excel traía fechas imposibles o en el
+            // futuro, y un valor que el sistema no conoce rompería la máquina
+            // de estados más tarde: se omiten, no tumban la importación.
+            if (!$clienteId || !$ingreso || $ingreso->isFuture() || ! $this->casoValido($fila)) {
                 $omitidos++;
                 continue;
             }
 
-            $cierre = $fila['fecha_cierre'] ? CarbonImmutable::parse($fila['fecha_cierre']) : null;
+            $cierre = $this->fecha($fila['fecha_cierre']);
             $estado = $fila['estado'] ?: Soporte::ESTADO_SOLUCIONADO;
             $cerrado = in_array($estado, Soporte::ESTADOS_FINALES, true);
 
@@ -334,7 +359,8 @@ class ImportarHistorico extends Command
 
         $this->info("Importados {$importados} casos."
             .($repetidos ? " {$repetidos} ya estaban importados." : '')
-            .($omitidos ? " Omitidos {$omitidos} por datos incompletos." : ''));
+            .($omitidos ? " Omitidos {$omitidos} por datos incompletos o inválidos." : ''));
+        $this->avisarMalformadas();
         $this->line('  El canal de ingreso es simulado y el tiempo de respuesta queda vacío:');
         $this->line('  ninguno de los dos existía en el Excel original.');
     }
@@ -409,19 +435,116 @@ class ImportarHistorico extends Command
      * --------------------------------------------------------------- */
 
     /** Lee el CSV fila por fila, sin cargarlo entero en memoria. */
-    private function filas(string $ruta): \Generator
+    /**
+     * Lee el CSV fila por fila, sin cargarlo entero en memoria.
+     *
+     * Lo que llega de un Excel no es limpio: BOM al inicio, Latin-1 en vez de
+     * UTF-8, filas vacías al final, alguna fila partida. Aquí se normaliza, y
+     * lo que no tiene arreglo se cuenta en vez de desaparecer en silencio.
+     *
+     * @param  array<int, string>  $requeridas
+     */
+    private function filas(string $ruta, array $requeridas): \Generator
     {
-        $fh = fopen($ruta, 'r');
-        $encabezado = fgetcsv($fh);
-
-        while (($datos = fgetcsv($fh)) !== false) {
-            if ($datos === [null] || count($datos) !== count($encabezado)) {
-                continue;
-            }
-
-            yield array_combine($encabezado, $datos);
+        if (filesize($ruta) > self::MAX_BYTES) {
+            throw new \RuntimeException(sprintf('%s pesa más de %d MB.', basename($ruta), self::MAX_BYTES / 1048576));
         }
 
-        fclose($fh);
+        $fh = fopen($ruta, 'r');
+
+        if ($fh === false) {
+            throw new \RuntimeException("No se pudo abrir {$ruta}");
+        }
+
+        try {
+            $encabezado = fgetcsv($fh, self::MAX_LINEA, ',', '"', '');
+
+            if (! $encabezado || $encabezado === [null]) {
+                throw new \RuntimeException(basename($ruta).' está vacío.');
+            }
+
+            $encabezado = array_map(fn ($columna) => trim($this->utf8((string) $columna)), $encabezado);
+            $encabezado[0] = preg_replace('/^\x{FEFF}/u', '', $encabezado[0]);
+
+            $faltan = array_diff($requeridas, $encabezado);
+
+            if ($faltan !== []) {
+                throw new \RuntimeException('Faltan columnas en '.basename($ruta).': '.implode(', ', $faltan));
+            }
+
+            while (($datos = fgetcsv($fh, self::MAX_LINEA, ',', '"', '')) !== false) {
+                if ($datos === [null]) {
+                    continue; // línea vacía
+                }
+
+                if (count($datos) !== count($encabezado)) {
+                    $this->malformadas++;
+                    continue;
+                }
+
+                yield array_combine($encabezado, array_map(fn ($valor) => trim($this->utf8((string) $valor)), $datos));
+            }
+        } finally {
+            fclose($fh);
+        }
+    }
+
+    /** Un CSV guardado desde Excel en Windows suele venir en Windows-1252. */
+    private function utf8(string $valor): string
+    {
+        return mb_check_encoding($valor, 'UTF-8') ? $valor : mb_convert_encoding($valor, 'UTF-8', 'Windows-1252');
+    }
+
+    /** Solo el formato del histórico; nada de "next monday" ni fechas que PHP corrige solas. */
+    private function fecha(string $valor): ?CarbonImmutable
+    {
+        if ($valor === '') {
+            return null;
+        }
+
+        foreach (['Y-m-d H:i:s', 'Y-m-d H:i'] as $formato) {
+            try {
+                $fecha = CarbonImmutable::createFromFormat($formato, $valor);
+            } catch (\InvalidArgumentException) {
+                continue; // Carbon 3 lanza en vez de devolver false
+            }
+
+            // Si al volver a escribirla no da lo mismo, PHP la "corrigió"
+            // (31 de febrero, hora 25): era una fecha imposible.
+            if ($fecha && $fecha->format($formato) === $valor) {
+                return $fecha;
+            }
+        }
+
+        return null;
+    }
+
+    /** Tipo, estado, canal e índices tienen que ser valores que el sistema conoce. */
+    private function casoValido(array $fila): bool
+    {
+        $indice = fn (string $valor) => $valor === '' || ctype_digit($valor);
+
+        return array_key_exists($fila['tipo_solicitud'], Soporte::TIPOS_SOLICITUD)
+            && ($fila['estado'] === '' || array_key_exists($fila['estado'], Soporte::ESTADOS))
+            && ($fila['canal_ingreso'] === '' || array_key_exists($fila['canal_ingreso'], Soporte::CANALES))
+            && in_array($fila['escalado'], ['', '0', '1'], true)
+            && $indice($fila['asesor_idx'])
+            && $indice($fila['tecnico_idx']);
+    }
+
+    private function clienteValido(array $fila): bool
+    {
+        return $fila['codigo_abonado'] !== '' && mb_strlen($fila['codigo_abonado']) <= 30
+            && $fila['cedula'] !== '' && mb_strlen($fila['cedula']) <= 30
+            && $fila['nombre'] !== '' && mb_strlen($fila['nombre']) <= 255
+            && mb_strlen($fila['telefono']) <= 30;
+    }
+
+    private function avisarMalformadas(): void
+    {
+        if ($this->malformadas > 0) {
+            $this->warn("  {$this->malformadas} fila(s) con columnas de más o de menos: no se importaron.");
+            $this->malformadas = 0;
+        }
     }
 }
