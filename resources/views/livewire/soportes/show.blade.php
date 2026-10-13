@@ -6,6 +6,7 @@ use App\Models\OrdenTrabajo;
 use App\Models\Soporte;
 use App\Models\Tecnico;
 use App\Models\User;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
@@ -152,7 +153,16 @@ new #[Layout('layouts.app')] class extends Component {
 
         $this->authorize('asignar', $this->soporte);
 
-        $this->validate(['tecnico_soporte_id' => 'required|exists:users,id']);
+        // No basta con que el usuario exista: tiene que ser alguien que pueda
+        // llevar el caso (nivel 2 o admin) y estar activo.
+        $this->validate(['tecnico_soporte_id' => [
+            'required',
+            Rule::exists('users', 'id')
+                ->whereIn('rol', [User::ROL_TECNICO_SOPORTE, User::ROL_ADMIN])
+                ->where('estado', 'activo'),
+        ]], [
+            'tecnico_soporte_id.exists' => 'Solo se asigna a un técnico de soporte activo.',
+        ]);
 
         $this->soporte->asignarTecnicoSoporte((int) $this->tecnico_soporte_id);
         $this->ok('Responsable asignado.');
@@ -207,9 +217,13 @@ new #[Layout('layouts.app')] class extends Component {
         $this->authorize('trabajar', $this->soporte);
 
         $this->validate([
-            'ingeniero_redes_id' => 'required|exists:users,id',
+            'ingeniero_redes_id' => [
+                'required',
+                Rule::exists('users', 'id')->where('rol', User::ROL_INGENIERO_REDES)->where('estado', 'activo'),
+            ],
             'motivo_escalamiento' => 'required|min:10',
         ], [
+            'ingeniero_redes_id.exists' => 'Solo se escala a un ingeniero de redes activo.',
             'ingeniero_redes_id.required' => 'Indica a qué ingeniero de redes se le entrega el caso.',
             'motivo_escalamiento.required' => 'Explica por qué el caso supera al nivel 2.',
         ]);
@@ -239,11 +253,12 @@ new #[Layout('layouts.app')] class extends Component {
         }
 
         $this->validate([
-            'tecnico_campo_id' => 'required|exists:tecnicos,id',
+            'tecnico_campo_id' => ['required', Rule::exists('tecnicos', 'id')->where('estado', 'activo')],
             'fecha_programada' => 'required|date|after_or_equal:today',
             'franja' => 'required|in:manana,tarde',
         ], [
             'tecnico_campo_id.required' => 'Selecciona el técnico que va a hacer la visita.',
+            'tecnico_campo_id.exists' => 'Solo se programa la visita con un técnico de campo activo.',
         ]);
 
         $orden = OrdenTrabajo::create([
