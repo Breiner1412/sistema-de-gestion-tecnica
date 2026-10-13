@@ -132,7 +132,18 @@ class OrdenTrabajo extends Model
 
     public function scopeDelDia(Builder $query, $fecha = null): Builder
     {
-        return $query->whereDate('fecha_programada', $fecha ?? today());
+        return $query->delDiaEn('fecha_programada', $fecha ?? today());
+    }
+
+    /**
+     * Un día como rango y no con whereDate(): DATE(columna) = ? obliga a MySQL a
+     * recorrer la tabla sin usar el índice (estado, fecha_programada).
+     */
+    public function scopeDelDiaEn(Builder $query, string $columna, $fecha): Builder
+    {
+        $dia = \Illuminate\Support\Carbon::parse($fecha);
+
+        return $query->whereBetween($columna, [$dia->copy()->startOfDay(), $dia->copy()->endOfDay()]);
     }
 
     /** Visitas de un técnico, recibiendo el usuario y no la ficha de técnico. */

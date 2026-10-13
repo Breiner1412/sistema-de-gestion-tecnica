@@ -34,11 +34,11 @@ new #[Layout('layouts.campo')] class extends Component {
         }
 
         return match ($this->cuando) {
-            'manana' => $query->whereDate('fecha_programada', today()->addDay()),
+            'manana' => $query->delDiaEn('fecha_programada', today()->addDay()),
             'pendientes' => $query->where(fn($q) => $q
                 ->whereNull('fecha_programada')
-                ->orWhereDate('fecha_programada', '<', today())),
-            default => $query->whereDate('fecha_programada', today()),
+                ->orWhere('fecha_programada', '<', today()->startOfDay())),
+            default => $query->delDiaEn('fecha_programada', today()),
         };
     }
 
@@ -59,7 +59,7 @@ new #[Layout('layouts.campo')] class extends Component {
                     fn($q) => $q->delTecnicoUsuario(auth()->user()),
                 )
                 ->whereIn('estado', OrdenTrabajo::ESTADOS_FINALES)
-                ->whereDate('hora_fin', today())
+                ->delDiaEn('hora_fin', today())
                 ->count(),
         ];
     }
