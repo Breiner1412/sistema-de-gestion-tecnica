@@ -20,19 +20,46 @@ new #[Layout('layouts.app')] class extends Component {
     {
         $this->authorize('viewAny', InformeMensual::class);
 
-        $anterior = now()->subMonth();
-        $this->anio = $this->anio ?: (string) $anterior->year;
-        $this->mes = $this->mes ?: (string) $anterior->month;
+        $this->normalizarPeriodo();
     }
 
-    /** Años en los que hay casos, para no ofrecer periodos vacíos. */
+    public function updated($propiedad): void
+    {
+        if (in_array($propiedad, ['anio', 'mes'], true)) {
+            $this->normalizarPeriodo();
+        }
+    }
+
+    /**
+     * El año y el mes llegan por la URL: "mes=13" o "anio=abc" no pueden
+     * llegar a la consulta. Lo que no es un periodo válido vuelve al mes pasado.
+     */
+    private function normalizarPeriodo(): void
+    {
+        $anterior = now()->subMonth();
+
+        $anioValido = ctype_digit($this->anio) && in_array((int) $this->anio, $this->anios, true);
+        $mesValido = ctype_digit($this->mes) && (int) $this->mes >= 1 && (int) $this->mes <= 12;
+
+        $this->anio = $anioValido ? (string) (int) $this->anio : (string) $anterior->year;
+        $this->mes = $mesValido ? (string) (int) $this->mes : (string) $anterior->month;
+    }
+
+    /**
+     * Años en los que hay casos, para no ofrecer periodos vacíos. Con min y
+     * max en vez de YEAR(), que no existe en SQLite: así lo cubren las pruebas.
+     */
     #[Computed]
     public function anios(): array
     {
-        return Soporte::selectRaw('distinct year(created_at) as anio')
-            ->orderByDesc('anio')
-            ->pluck('anio')
-            ->all();
+        $primero = Soporte::min('created_at');
+        $ultimo = Soporte::max('created_at');
+        $actual = now()->year;
+
+        $desde = $primero ? min(\Carbon\Carbon::parse($primero)->year, $actual) : $actual;
+        $hasta = $ultimo ? max(\Carbon\Carbon::parse($ultimo)->year, $actual) : $actual;
+
+        return range($hasta, $desde);
     }
 
     /** Carga del mes por técnico, con el informe asociado si ya existe. */
@@ -40,7 +67,7 @@ new #[Layout('layouts.app')] class extends Component {
     public function filas()
     {
         $inicio = now()->setDate((int) $this->anio, (int) $this->mes, 1)->startOfMonth();
-        $fin = (clone $inicio)->endOfMonth();
+        $fin = $inicio->copy()->endOfMonth();
 
         $carga = Soporte::whereNotNull('tecnico_soporte_id')
             ->whereBetween('created_at', [$inicio, $fin])
