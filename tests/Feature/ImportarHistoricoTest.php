@@ -27,7 +27,7 @@ it('crea los clientes que no existían', function () {
         ->and(Cliente::where('codigo_abonado', 'C100001')->exists())->toBeTrue();
 });
 
-it('no duplica clientes al correrlo dos veces', function () {
+it('correrlo dos veces no duplica ni clientes ni casos', function () {
     $caso = ['C100001', 'soporte_remoto', 'caja', 'internet', 'LENTITUD E INTERMITENCIA', '',
         'solucionado', '2026-03-10 09:00:00', '2026-03-10 11:30:00', '0', '0', ''];
 
@@ -35,7 +35,46 @@ it('no duplica clientes al correrlo dos veces', function () {
     importar([$caso]);
 
     expect(Cliente::count())->toBe(2)
-        ->and(Soporte::count())->toBe(2); // los clientes se reutilizan, los casos sí se repiten
+        ->and(Soporte::count())->toBe(1);
+});
+
+it('dos filas idénticas del histórico siguen siendo dos casos', function () {
+    $caso = ['C100001', 'soporte_remoto', 'caja', 'internet', 'LENTITUD E INTERMITENCIA', '',
+        'solucionado', '2026-03-10 09:00:00', '2026-03-10 11:30:00', '0', '0', ''];
+
+    importar([$caso, $caso]);
+    importar([$caso, $caso]);
+
+    expect(Soporte::count())->toBe(2);
+});
+
+it('--fresh borra solo lo importado y conserva los casos creados en la aplicación', function () {
+    $propio = soporteDePrueba(['descripcion' => 'Caso creado a mano en la aplicación.']);
+    $caso = ['C100001', 'soporte_remoto', 'caja', 'internet', 'LENTITUD E INTERMITENCIA', '',
+        'solucionado', '2026-03-10 09:00:00', '2026-03-10 11:30:00', '0', '0', ''];
+    importar([$caso]);
+
+    [$archivo, $clientes] = csvDePrueba([$caso]);
+    $this->artisan('soportes:importar-historico', ['--casos' => $archivo, '--clientes' => $clientes, '--fresh' => true])
+        ->expectsConfirmation('Esto borra los casos importados del histórico y sus visitas. ¿Continuar?', 'yes')
+        ->assertSuccessful();
+
+    expect(Soporte::find($propio->id))->not->toBeNull()
+        ->and(Soporte::whereNotNull('origen_importacion')->count())->toBe(1);
+});
+
+it('si falla a mitad no deja nada a medias', function () {
+    $caso = ['C100001', 'soporte_remoto', 'caja', 'internet', 'LENTITUD E INTERMITENCIA', '',
+        'solucionado', '2026-03-10 09:00:00', '2026-03-10 11:30:00', '0', '0', ''];
+    User::query()->where('rol', User::ROL_TECNICO_SOPORTE)->delete(); // sin equipo, los casos fallan
+
+    [$archivo, $clientes] = csvDePrueba([$caso]);
+    $this->artisan('soportes:importar-historico', ['--casos' => $archivo, '--clientes' => $clientes])
+        ->assertFailed();
+
+    // Los clientes se importan antes que los casos: tampoco deben quedar.
+    expect(Cliente::count())->toBe(0)
+        ->and(Soporte::count())->toBe(0);
 });
 
 it('numera los casos de forma consecutiva y sin chocar con los existentes', function () {

@@ -35,13 +35,15 @@ class ImportarHistorico extends Command
     protected $signature = 'soportes:importar-historico
                             {--casos=database/data/historico_casos.csv : CSV de casos}
                             {--clientes=database/data/historico_clientes.csv : CSV de clientes}
-                            {--fresh : Borra los casos existentes antes de importar}
+                            {--fresh : Borra los casos importados antes (los creados en la aplicación se conservan)}
                             {--actualizar : Refresca nombre y telefono de los clientes que ya existen}
                             {--limit=0 : Importa solo los primeros N casos}';
 
     protected $description = 'Importa el histórico seudonimizado de la operación desde CSV';
 
     private const LOTE = 500;
+
+    private const NOTA_IMPORTACION = 'Caso importado del histórico de la operación.';
 
     public function handle(): int
     {
@@ -56,16 +58,28 @@ class ImportarHistorico extends Command
             }
         }
 
-        if ($this->option('fresh')) {
-            if (!$this->confirm('Esto borra TODOS los casos y sus visitas. ¿Continuar?', false)) {
-                return self::FAILURE;
-            }
-
-            $this->limpiar();
+        if ($this->option('fresh')
+            && ! $this->confirm('Esto borra los casos importados del histórico y sus visitas. ¿Continuar?', false)) {
+            return self::FAILURE;
         }
 
-        $clientes = $this->importarClientes($rutaClientes);
-        $this->importarCasos($rutaCasos, $clientes);
+        // Todo o nada: si algo falla a mitad, la base queda como estaba, y no
+        // con los casos borrados y el histórico a medias.
+        try {
+            DB::transaction(function () use ($rutaCasos, $rutaClientes) {
+                if ($this->option('fresh')) {
+                    $this->limpiar();
+                }
+
+                $clientes = $this->importarClientes($rutaClientes);
+                $this->importarCasos($rutaCasos, $clientes);
+            });
+        } catch (\RuntimeException $e) {
+            $this->error($e->getMessage());
+            $this->line('  No se importó nada: la base quedó como estaba.');
+
+            return self::FAILURE;
+        }
 
         return self::SUCCESS;
     }
@@ -80,10 +94,24 @@ class ImportarHistorico extends Command
         return $absoluta ? $ruta : base_path($ruta);
     }
 
+    /**
+     * Borra solo lo que vino del histórico; los casos creados en la aplicación
+     * se quedan. Las visitas y el historial caen por cascada.
+     */
     private function limpiar(): void
     {
-        DB::table('soportes')->delete(); // las visitas e historial caen por cascada
-        $this->warn('Casos existentes eliminados.');
+        $borrados = DB::table('soportes')
+            ->where(fn ($q) => $q
+                ->whereNotNull('origen_importacion')
+                // Importados antes de que existiera la marca: se reconocen por
+                // la nota automática que el importador deja en su historial.
+                ->orWhereExists(fn ($h) => $h->from('soporte_historial_estados')
+                    ->whereColumn('soporte_historial_estados.soporte_id', 'soportes.id')
+                    ->whereNull('soporte_historial_estados.usuario_id')
+                    ->where('soporte_historial_estados.motivo', self::NOTA_IMPORTACION)))
+            ->delete();
+
+        $this->warn("{$borrados} casos importados eliminados.");
     }
 
     /* ---------------------------------------------------------------
@@ -184,17 +212,22 @@ class ImportarHistorico extends Command
         $asesores = User::where('rol', User::ROL_CALL_CENTER)->orderBy('id')->pluck('id')->all();
 
         if (!$tecnicos || !$asesores) {
-            $this->error('Faltan usuarios. Corre primero: php artisan db:seed --class=UsuarioSeeder');
-
-            return;
+            throw new \RuntimeException('Faltan usuarios. Corre primero: php artisan db:seed --class=UsuarioSeeder');
         }
 
         $calendario = CalendarioHabil::desdeConfig();
         $consecutivos = $this->consecutivosPorAnio();
         $limite = (int) $this->option('limit');
 
+        // Lo que ya entró en una corrida anterior se salta: reimportar no
+        // duplica nada.
+        $yaImportados = DB::table('soportes')->whereNotNull('origen_importacion')
+            ->pluck('origen_importacion')->flip()->all();
+        $vecesVista = [];
+
         $lote = [];
         $importados = 0;
+        $repetidos = 0;
         $omitidos = 0;
         $barra = $this->output->createProgressBar();
         $barra->start();
@@ -202,6 +235,18 @@ class ImportarHistorico extends Command
         foreach ($this->filas($ruta) as $fila) {
             if ($limite > 0 && $importados >= $limite) {
                 break;
+            }
+
+            // La marca sale del contenido de la fila y de cuántas veces se ha
+            // visto una fila idéntica: dos casos iguales del mismo abonado a la
+            // misma hora siguen siendo dos, y el número de línea no importa.
+            $contenido = implode('|', $fila);
+            $vecesVista[$contenido] = ($vecesVista[$contenido] ?? 0) + 1;
+            $origen = sha1($contenido.'#'.$vecesVista[$contenido]);
+
+            if (isset($yaImportados[$origen])) {
+                $repetidos++;
+                continue;
             }
 
             $clienteId = $clientes[$fila['codigo_abonado']] ?? null;
@@ -233,6 +278,7 @@ class ImportarHistorico extends Command
 
             $lote[] = [
                 'numero_soporte' => sprintf('SGT-%d-%06d', $anio, $consecutivos[$anio]),
+                'origen_importacion' => $origen,
                 'cliente_id' => $clienteId,
                 'tipo_solicitud' => $fila['tipo_solicitud'],
                 'canal_ingreso' => $fila['canal_ingreso'] ?: Soporte::CANAL_CALL_CENTER,
@@ -246,7 +292,7 @@ class ImportarHistorico extends Command
                     ? $tecnicos[((int) $fila['tecnico_idx']) % count($tecnicos)]
                     : null,
                 'descripcion' => $this->descripcion($fila),
-                'observaciones_cierre' => $cerrado ? 'Caso importado del histórico de la operación.' : null,
+                'observaciones_cierre' => $cerrado ? self::NOTA_IMPORTACION : null,
                 'estado' => $estado,
                 'escalado_nivel_3' => $fila['escalado'] === '1',
                 'fecha_escalamiento' => $fila['escalado'] === '1' ? $ingreso : null,
@@ -286,7 +332,9 @@ class ImportarHistorico extends Command
             Soporte::sincronizarSecuencia($anio);
         }
 
-        $this->info("Importados {$importados} casos.".($omitidos ? " Omitidos {$omitidos} por datos incompletos." : ''));
+        $this->info("Importados {$importados} casos."
+            .($repetidos ? " {$repetidos} ya estaban importados." : '')
+            .($omitidos ? " Omitidos {$omitidos} por datos incompletos." : ''));
         $this->line('  El canal de ingreso es simulado y el tiempo de respuesta queda vacío:');
         $this->line('  ninguno de los dos existía en el Excel original.');
     }
@@ -308,7 +356,7 @@ class ImportarHistorico extends Command
                     'estado_anterior' => null,
                     'estado_nuevo' => $caso['estado'],
                     'usuario_id' => null,
-                    'motivo' => 'Caso importado del histórico de la operación.',
+                    'motivo' => self::NOTA_IMPORTACION,
                     'automatico' => true,
                     'created_at' => $caso['created_at'],
                     'updated_at' => $caso['created_at'],
