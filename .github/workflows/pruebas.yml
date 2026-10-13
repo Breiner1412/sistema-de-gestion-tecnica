@@ -8,6 +8,9 @@ on:
     branches: [main, auditoria]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   php:
     runs-on: ubuntu-latest
