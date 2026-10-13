@@ -1,3 +1,248 @@
+/*
+ * IBM Plex servida desde el propio servidor: Vite copia los archivos a
+ * public/build. Solo el subconjunto latino (tildes y eñes incluidas).
+ */
+@import '@fontsource/ibm-plex-sans/latin-400.css';
+@import '@fontsource/ibm-plex-sans/latin-500.css';
+@import '@fontsource/ibm-plex-sans/latin-600.css';
+@import '@fontsource/ibm-plex-sans/latin-700.css';
+@import '@fontsource/ibm-plex-mono/latin-400.css';
+@import '@fontsource/ibm-plex-mono/latin-500.css';
+@import '@fontsource/ibm-plex-mono/latin-600.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * Colores de la dirección "Consola" como canales RGB, para que Tailwind
+ * pueda aplicar opacidad (bg-acento/10). Claro en :root, oscuro en .dark.
+ */
+@layer base {
+    :root {
+        color-scheme: light;
+
+        --c-fondo: 246 247 249;
+        --c-superficie: 255 255 255;
+        --c-elevada: 246 247 249;
+        --c-linea: 201 208 216;
+        --c-linea-suave: 237 240 243;
+        --c-tinta: 17 22 28;
+        --c-tinta-2: 58 69 83;
+        --c-tinta-3: 90 101 115;
+
+        --c-menu: 17 22 28;
+        --c-menu-activo: 37 46 57;
+        --c-menu-tinta: 201 208 216;
+        --c-menu-borde: 37 46 57;
+
+        --c-acento: 31 79 191;
+        --c-acento-hover: 25 63 153;
+        --c-acento-texto: 31 79 191;
+        --c-acento-tinte: 232 238 251;
+        --c-acento-tinte-texto: 25 63 153;
+
+        --c-peligro: 163 18 46;
+        --c-peligro-borde: 232 180 191;
+
+        --c-sla-ok: 20 95 61;
+        --c-sla-ok-fondo: 227 242 234;
+        --c-sla-ok-barra: 23 115 74;
+        --c-sla-atencion: 122 72 0;
+        --c-sla-atencion-fondo: 255 241 214;
+        --c-sla-atencion-barra: 184 122 0;
+        --c-sla-riesgo: 154 50 6;
+        --c-sla-riesgo-fondo: 255 228 213;
+        --c-sla-riesgo-barra: 176 58 8;
+        --c-sla-vencido: 163 18 46;
+        --c-sla-vencido-oscuro: 126 13 35;
+        --c-sla-vencido-texto: 163 18 46;
+        --c-sla-pausa: 58 69 83;
+        --c-sla-pausa-borde: 90 101 115;
+
+        --c-estado-proceso: 31 79 191;
+        --c-estado-seguimiento: 14 110 122;
+        --c-estado-sincontacto: 107 63 160;
+        --c-estado-enviado: 25 63 153;
+        --c-estado-escalado: 17 22 28;
+
+        --c-recurrente: 78 42 122;
+        --c-recurrente-fondo: 241 235 248;
+    }
+
+    .dark {
+        color-scheme: dark;
+
+        --c-fondo: 14 18 23;
+        --c-superficie: 22 27 34;
+        --c-elevada: 30 37 46;
+        --c-linea: 44 53 65;
+        --c-linea-suave: 34 42 51;
+        --c-tinta: 230 234 239;
+        --c-tinta-2: 195 203 213;
+        --c-tinta-3: 163 173 185;
+
+        --c-menu: 10 13 17;
+        --c-menu-activo: 30 37 46;
+        --c-menu-tinta: 201 208 216;
+        --c-menu-borde: 30 37 46;
+
+        --c-acento: 61 111 224;
+        --c-acento-hover: 91 141 239;
+        --c-acento-texto: 127 164 245;
+        --c-acento-tinte: 24 38 68;
+        --c-acento-tinte-texto: 169 194 248;
+
+        --c-peligro: 255 107 131;
+        --c-peligro-borde: 107 34 50;
+
+        --c-sla-ok: 111 211 156;
+        --c-sla-ok-fondo: 16 41 28;
+        --c-sla-ok-barra: 63 168 114;
+        --c-sla-atencion: 240 197 101;
+        --c-sla-atencion-fondo: 46 34 9;
+        --c-sla-atencion-barra: 212 154 38;
+        --c-sla-riesgo: 255 154 112;
+        --c-sla-riesgo-fondo: 51 23 11;
+        --c-sla-riesgo-barra: 240 112 47;
+        --c-sla-vencido: 215 51 79;
+        --c-sla-vencido-oscuro: 168 33 58;
+        --c-sla-vencido-texto: 255 107 131;
+        --c-sla-pausa: 195 203 213;
+        --c-sla-pausa-borde: 135 146 160;
+
+        --c-estado-proceso: 127 164 245;
+        --c-estado-seguimiento: 63 182 196;
+        --c-estado-sincontacto: 167 132 224;
+        --c-estado-enviado: 169 194 248;
+        --c-estado-escalado: 230 234 239;
+
+        --c-recurrente: 216 198 245;
+        --c-recurrente-fondo: 36 25 58;
+    }
+
+    /*
+     * El informe (y cualquier página) se imprime siempre en claro, aunque la
+     * pantalla esté en oscuro: se reponen los valores claros.
+     */
+    @media print {
+        .dark {
+            color-scheme: light;
+
+            --c-fondo: 255 255 255;
+            --c-superficie: 255 255 255;
+            --c-elevada: 246 247 249;
+            --c-linea: 201 208 216;
+            --c-linea-suave: 237 240 243;
+            --c-tinta: 17 22 28;
+            --c-tinta-2: 58 69 83;
+            --c-tinta-3: 90 101 115;
+            --c-acento: 31 79 191;
+            --c-acento-texto: 31 79 191;
+            --c-acento-tinte: 232 238 251;
+            --c-acento-tinte-texto: 25 63 153;
+            --c-peligro: 163 18 46;
+            --c-sla-ok: 20 95 61;
+            --c-sla-ok-fondo: 227 242 234;
+            --c-sla-ok-barra: 23 115 74;
+            --c-sla-atencion: 122 72 0;
+            --c-sla-atencion-fondo: 255 241 214;
+            --c-sla-atencion-barra: 184 122 0;
+            --c-sla-riesgo: 154 50 6;
+            --c-sla-riesgo-fondo: 255 228 213;
+            --c-sla-riesgo-barra: 176 58 8;
+            --c-sla-vencido: 163 18 46;
+            --c-sla-vencido-texto: 163 18 46;
+            --c-sla-pausa: 58 69 83;
+            --c-sla-pausa-borde: 90 101 115;
+            --c-recurrente: 78 42 122;
+            --c-recurrente-fondo: 241 235 248;
+        }
+
+        body {
+            background: #fff;
+        }
+    }
+
+    html {
+        @apply bg-fondo text-tinta antialiased;
+        -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+        @apply bg-fondo font-sans text-tinta;
+    }
+
+    /* Números de caso, tiempos y cifras: dígitos de ancho fijo. */
+    .font-mono,
+    .tabular {
+        font-variant-numeric: tabular-nums;
+    }
+
+    a {
+        @apply text-acento-texto;
+    }
+
+    :focus-visible {
+        @apply outline-none ring-2 ring-acento-texto ring-offset-2 ring-offset-fondo;
+    }
+}
+
+/*
+ * Piezas repetidas en todas las pantallas. Los componentes Blade las usan;
+ * aquí vive el estilo para no repetirlo en cada vista.
+ */
+@layer components {
+    .tarjeta {
+        @apply rounded-tarjeta border border-linea bg-superficie;
+    }
+
+    .titulo-seccion {
+        @apply text-[13px] font-semibold uppercase tracking-[0.06em] text-tinta-3;
+    }
+
+    .etiqueta {
+        @apply mb-1 block text-sm font-medium text-tinta;
+    }
+
+    .control {
+        @apply block w-full rounded-control border-linea bg-superficie text-sm text-tinta shadow-none placeholder:text-tinta-3 focus:border-acento-texto focus:ring-acento-texto;
+    }
+
+    .control-campo {
+        @apply block w-full rounded-[10px] border-linea bg-superficie text-base text-tinta shadow-none focus:border-acento-texto focus:ring-acento-texto;
+        min-height: 52px;
+    }
+
+    .error-campo {
+        @apply mt-1 text-sm font-medium text-peligro;
+    }
+
+    .tabla {
+        @apply w-full border-collapse text-[13px];
+    }
+
+    .tabla thead tr {
+        @apply border-b border-linea bg-elevada text-left text-[11px] uppercase tracking-[0.06em] text-tinta-3;
+    }
+
+    .tabla th {
+        @apply h-8 whitespace-nowrap px-3 font-semibold;
+    }
+
+    .tabla tbody tr {
+        @apply border-b border-linea-suave transition-colors last:border-b-0 hover:bg-elevada;
+    }
+
+    .tabla td {
+        @apply h-11 px-3 py-1.5 align-middle;
+    }
+
+    .aviso-ok {
+        @apply rounded-tarjeta border border-sla-ok/30 bg-sla-ok-fondo px-4 py-3 text-sm font-medium text-sla-ok;
+    }
+
+    .aviso-error {
+        @apply rounded-tarjeta border border-peligro/30 bg-peligro/10 px-4 py-3 text-sm font-medium text-peligro;
+    }
+}
