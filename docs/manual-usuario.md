@@ -279,7 +279,7 @@ En el menú, toque **Informes**: ahí están **sus** informes mensuales ya publi
 reciente al más antiguo. Los que todavía no ha abierto dicen **Nuevo**. Al abrir uno, el
 sistema deja constancia de que usted lo recibió y lo marca como **Leído**. Puede imprimirlo
 con **Imprimir**. Los informes de sus compañeros y los que la coordinación aún no ha
-publicado no le aparecen. Vea [El informe mensual](#el-informe-mensual).
+publicado no le aparecen ni se pueden abrir. Vea [El informe mensual](#el-informe-mensual).
 
 ---
 

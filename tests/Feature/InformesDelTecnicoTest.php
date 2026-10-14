@@ -45,6 +45,23 @@ it('el técnico no ve los informes de otros ni los borradores', function () {
         ->assertSee('Todavía no tienes informes publicados');
 });
 
+it('el técnico no abre su informe por enlace directo mientras sea borrador', function () {
+    $tecnico = usuarioCon(User::ROL_TECNICO_SOPORTE);
+    $borrador = informeDe($tecnico, 2026, 9, publicado: false);
+
+    $this->actingAs($tecnico)->get(route('informes.show', $borrador))->assertForbidden();
+
+    $borrador->publicar();
+
+    $this->actingAs($tecnico)->get(route('informes.show', $borrador))->assertOk();
+});
+
+it('la gestión sí abre el borrador para escribirlo', function () {
+    $borrador = informeDe(usuarioCon(User::ROL_TECNICO_SOPORTE), 2026, 9, publicado: false);
+
+    $this->actingAs(usuarioCon(User::ROL_GERENTE))->get(route('informes.show', $borrador))->assertOk();
+});
+
 it('el técnico no puede generar informes desde esa pantalla', function () {
     $tecnico = usuarioCon(User::ROL_TECNICO_SOPORTE);
     $this->actingAs($tecnico);
