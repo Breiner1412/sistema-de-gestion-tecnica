@@ -43,7 +43,7 @@
                 <template x-if="sinSenal">
                     <span class="flex items-center gap-1.5">
                         <svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 7c4-4 10-4 14 0M4.5 9.8c2.6-2.4 6.4-2.4 9 0M7 12.6c1.2-1 2.8-1 4 0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path><path d="M2.5 2.5l13 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>
-                        Sin señal · se guarda en el teléfono
+                        <span x-text="pendientes > 0 ? `Sin señal · ${pendientes} por enviar` : 'Sin señal · se guarda en el teléfono'">Sin señal · se guarda en el teléfono</span>
                     </span>
                 </template>
                 <template x-if="!sinSenal && pendientes > 0">

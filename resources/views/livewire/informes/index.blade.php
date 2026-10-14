@@ -18,9 +18,31 @@ new #[Layout('layouts.app')] class extends Component {
 
     public function mount(): void
     {
-        $this->authorize('viewAny', InformeMensual::class);
+        // La gestión ve la carga del equipo; el técnico de soporte, sus informes.
+        if (! $this->esGestion) {
+            $this->authorize('verLosPropios', InformeMensual::class);
+
+            return;
+        }
 
         $this->normalizarPeriodo();
+    }
+
+    #[Computed]
+    public function esGestion(): bool
+    {
+        return auth()->user()->can('viewAny', InformeMensual::class);
+    }
+
+    /** Los informes del técnico que ya se publicaron: un borrador todavía no es suyo. */
+    #[Computed]
+    public function misInformes()
+    {
+        return InformeMensual::where('tecnico_id', auth()->id())
+            ->whereNotNull('publicado_at')
+            ->orderByDesc('anio')
+            ->orderByDesc('mes')
+            ->get();
     }
 
     public function updated($propiedad): void
@@ -114,6 +136,38 @@ new #[Layout('layouts.app')] class extends Component {
 }; ?>
 
 <div class="mx-auto flex max-w-[1100px] flex-col gap-4 px-4 py-5 sm:px-6 lg:py-6">
+  @if (! $this->esGestion)
+    <x-encabezado titulo="Mis informes"
+        subtitulo="Los informes de rendimiento que la coordinación ya te entregó, del más reciente al más antiguo." />
+
+    @if ($this->misInformes->isEmpty())
+        <p class="tarjeta p-6 text-center text-sm text-tinta-3">
+            Todavía no tienes informes publicados. Aparecen aquí cuando la coordinación publica el de un mes.
+        </p>
+    @else
+        <ul class="tarjeta divide-y divide-linea-suave">
+            @foreach ($this->misInformes as $informe)
+                <li wire:key="informe-{{ $informe->id }}">
+                    <a href="{{ route('informes.show', $informe) }}" wire:navigate
+                       class="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-tinta no-underline transition-colors hover:bg-elevada">
+                        <span class="font-medium">{{ $informe->periodo() }}</span>
+                        <span class="flex items-center gap-3 text-xs text-tinta-3">
+                            <span>Publicado <span class="font-mono">{{ $informe->publicado_at->format('d/m/Y') }}</span></span>
+                            @if ($informe->visto_at)
+                                <span class="inline-flex items-center gap-1 text-sla-ok">
+                                    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 5.2 4 7.6 8.6 2.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                                    Leído
+                                </span>
+                            @else
+                                <span class="rounded-[3px] bg-acento-tinte px-1.5 font-semibold text-acento-tinte-texto">Nuevo</span>
+                            @endif
+                        </span>
+                    </a>
+                </li>
+            @endforeach
+        </ul>
+    @endif
+  @else
     <x-encabezado titulo="Informes de rendimiento"
         subtitulo="Un informe por técnico y por mes, con las cifras del período y un espacio de observaciones para la retroalimentación.">
         <x-slot:acciones>
@@ -176,4 +230,5 @@ new #[Layout('layouts.app')] class extends Component {
             @endforelse
         </tbody>
     </x-tabla>
+  @endif
 </div>

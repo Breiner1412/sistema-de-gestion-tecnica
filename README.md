@@ -3,8 +3,39 @@
 Sistema de control operativo para la mesa de soporte de un proveedor de internet y TV
 por fibra. Laravel 13 · Livewire 3 (Volt) · MySQL · Tailwind.
 
-Este archivo explica **por qué está hecho así**. Si lo que busca es cómo se usa, el
-[manual de usuario](docs/manual-de-usuario.md) lo cuenta por rol y sin términos técnicos.
+![Bandeja de casos: cada caso con su semáforo de SLA, el que vence primero arriba](docs/capturas/bandeja-escritorio-claro.png)
+
+La bandeja ordena los casos abiertos por lo que vence primero. El semáforo de SLA no depende
+solo del color: cada estado tiene su forma, su palabra, su barra y su tiempo, y lo único que
+va relleno es lo vencido.
+
+### Claro y oscuro
+
+Cada persona elige en el menú entre claro, oscuro o lo que diga su equipo, y queda guardado
+en su cuenta. La pantalla de campo va aparte: clara por defecto, con un botón de modo noche.
+
+| Claro | Oscuro |
+|---|---|
+| ![Bandeja en modo claro](docs/capturas/bandeja-escritorio-claro.png) | ![Bandeja en modo oscuro](docs/capturas/bandeja-escritorio-oscuro.png) |
+| ![Ficha del caso en modo claro](docs/capturas/ficha-escritorio-claro.png) | ![Ficha del caso en modo oscuro](docs/capturas/ficha-escritorio-oscuro.png) |
+| ![Panel en modo claro](docs/capturas/panel-escritorio-claro.png) | ![Panel en modo oscuro](docs/capturas/panel-escritorio-oscuro.png) |
+
+### Más pantallas
+
+| | | |
+|---|---|---|
+| ![Mi ruta en el celular](docs/capturas/campo-celular-claro.png)<br>**Mi ruta** · el técnico en el celular | ![Sin señal, un cierre por enviar](docs/capturas/campo-sin-senal-celular-claro.png)<br>**Sin señal** · el cierre queda en el teléfono | ![Bandeja en el celular](docs/capturas/bandeja-celular-claro.png)<br>**Bandeja** en el celular |
+| ![Abonados recurrentes](docs/capturas/recurrentes-escritorio-claro.png)<br>**Abonados recurrentes** | ![Informe mensual](docs/capturas/informe-escritorio-claro.png)<br>**Informe mensual** por técnico | ![Inventario](docs/capturas/inventario-escritorio-claro.png)<br>**Inventario** y kardex |
+| ![Clientes](docs/capturas/clientes-escritorio-claro.png)<br>**Clientes** | ![Usuarios](docs/capturas/usuarios-escritorio-claro.png)<br>**Usuarios** y roles | ![Entrar](docs/capturas/login-escritorio-claro.png)<br>**Entrar** con las cuentas demo |
+
+Todos los datos de las capturas son ficticios. Se regeneran con `npm run capturas`
+(ver [`scripts/capturas.mjs`](scripts/capturas.mjs)).
+
+> **¿Cómo se usa?** El [manual de usuario](docs/manual-usuario.md) lo explica por rol, paso
+> a paso y sin términos técnicos: entrar, crear un caso, leer el semáforo, escalar, cerrar
+> una visita sin señal, el informe del mes y más, con preguntas frecuentes al final.
+
+Este archivo, en cambio, explica **por qué está hecho así**.
 
 ---
 
