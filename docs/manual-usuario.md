@@ -275,8 +275,11 @@ toque **Confirmar cancelación**. Queda en el historial.
 
 ### Su informe del mes
 
-Cuando la coordinación publica su informe mensual, le comparte el enlace. Al abrirlo, el
-sistema deja constancia de que usted lo recibió. Vea [El informe mensual](#el-informe-mensual).
+En el menú, toque **Informes**: ahí están **sus** informes mensuales ya publicados, del más
+reciente al más antiguo. Los que todavía no ha abierto dicen **Nuevo**. Al abrir uno, el
+sistema deja constancia de que usted lo recibió y lo marca como **Leído**. Puede imprimirlo
+con **Imprimir**. Los informes de sus compañeros y los que la coordinación aún no ha
+publicado no le aparecen. Vea [El informe mensual](#el-informe-mensual).
 
 ---
 
@@ -430,8 +433,9 @@ espacio para la retroalimentación.
 ![Informe mensual](capturas/informe-escritorio-claro.png)
 
 **Al publicar, las cifras se congelan** y el informe ya no se puede editar: un documento
-firmado no debe cambiar porque después alguien movió un caso viejo. Comparta el enlace con el
-técnico; cuando él lo abra, el informe mostrará **Recibido por el técnico** con la fecha.
+firmado no debe cambiar porque después alguien movió un caso viejo. Desde ese momento el
+técnico lo encuentra en su menú, en **Informes**; cuando lo abre, el informe muestra
+**Recibido por el técnico** con la fecha.
 
 **Imprimir** lo saca en papel, siempre en claro y sin el menú, con las dos líneas para firmar.
 
@@ -576,4 +580,4 @@ Es normal: al publicar, el informe congela sus cifras. El panel siempre muestra 
 | Usuarios | | | | | | ✓ |
 
 ¹ En los casos que tiene asignados o que todavía no tienen responsable.
-² Lo lee con el enlace que le comparte la coordinación.
+² En **Informes** ve los suyos, una vez publicados.

@@ -125,10 +125,15 @@ describe('visitas', function () {
 });
 
 describe('informes', function () {
-    it('un técnico no abre el listado de informes de gestión', function () {
+    it('un técnico no ve el listado de informes de gestión, solo los suyos', function () {
+        $companero = usuarioCon(User::ROL_TECNICO_SOPORTE, 'Compañero de equipo');
         $this->actingAs(usuarioCon(User::ROL_TECNICO_SOPORTE));
 
-        $this->get(route('informes.index'))->assertForbidden();
+        $this->get(route('informes.index'))
+            ->assertOk()
+            ->assertSee('Mis informes')
+            ->assertDontSee('Informes de rendimiento')
+            ->assertDontSee($companero->name);
     });
 });
 

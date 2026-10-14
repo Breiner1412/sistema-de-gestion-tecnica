@@ -15,6 +15,12 @@ class InformeMensualPolicy
         return $usuario->tieneRol(User::ROL_ADMIN, User::ROL_GERENTE);
     }
 
+    /** El listado de sus propios informes, ya entregados. */
+    public function verLosPropios(User $usuario): bool
+    {
+        return $usuario->tieneRol(User::ROL_TECNICO_SOPORTE);
+    }
+
     public function view(User $usuario, InformeMensual $informe): bool
     {
         return $this->viewAny($usuario) || $usuario->id === $informe->tecnico_id;
