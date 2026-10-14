@@ -31,8 +31,11 @@ en su cuenta. La pantalla de campo va aparte: clara por defecto, con un botón d
 Todos los datos de las capturas son ficticios. Se regeneran con `npm run capturas`
 (ver [`scripts/capturas.mjs`](scripts/capturas.mjs)).
 
-Este archivo explica **por qué está hecho así**. Si lo que busca es cómo se usa, el
-[manual de usuario](docs/manual-de-usuario.md) lo cuenta por rol y sin términos técnicos.
+> **¿Cómo se usa?** El [manual de usuario](docs/manual-usuario.md) lo explica por rol, paso
+> a paso y sin términos técnicos: entrar, crear un caso, leer el semáforo, escalar, cerrar
+> una visita sin señal, el informe del mes y más, con preguntas frecuentes al final.
+
+Este archivo, en cambio, explica **por qué está hecho así**.
 
 ---
 
