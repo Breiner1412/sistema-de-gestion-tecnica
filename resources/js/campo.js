@@ -14,6 +14,7 @@
  * distinguir el fallo que se arregla reintentando del que no.
  */
 
+import { armarCarga } from './campo/carga.js'
 import { decidir, esDe, motivoPorDefecto } from './campo/decision.js'
 
 /* ---------------------------------------------------------------
@@ -549,19 +550,7 @@ function registrar(Alpine) {
             this.enviando = true
             this.error = ''
 
-            const carga = {
-                uuid: crypto.randomUUID(),
-                estado: this.estado,
-                diagnostico_id: this.completa ? +this.diagnosticoId : null,
-                observaciones: this.completa ? this.observaciones.trim() : null,
-                motivo: this.completa ? null : this.motivo.trim(),
-                cerrada_en_terreno_at: new Date().toISOString(),
-                latitud: this.gps?.latitud ?? null,
-                longitud: this.gps?.longitud ?? null,
-                firma: this.completa ? this.firma : null,
-                fotos: this.fotos,
-                materiales: this.materiales.map(({ material_id, cantidad }) => ({ material_id, cantidad })),
-            }
+            const carga = armarCarga(this, crypto.randomUUID(), new Date().toISOString())
 
             const { decision, motivo } = await encolar(this.urlCierre, carga)
 
